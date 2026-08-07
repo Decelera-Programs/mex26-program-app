@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(jsx|tsx|js|ts\\)$\")",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(Get-ChildItem -Path \".\" -Name)",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(Get-ChildItem -Path \"src\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(cd \"c:\\\\Users\\\\CarlosMartinez\\\\OneDrive - SANCUS CAPITAL SGEIC S.A\\\\Escritorio\\\\men26-program-app\"; Get-ChildItem -Path \"src\" -Recurse | Where-Object { $_.PSIsContainer } | Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\CarlosMartinez\\\\OneDrive - SANCUS CAPITAL SGEIC S.A\\\\Escritorio\\\\men26-program-app\" -Directory)",
+      "Bash(npx prisma *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":5173\\\\|:3000\\\\|:4173\")",
+      "Bash(findstr \"LISTENING\")",
+      "Bash(findstr \":5173\\\\|:3000\\\\|:4173\\\\|:8080\\\\|:5000\\\\|:4000\\\\|:3001\")"
+    ]
+  }
+}

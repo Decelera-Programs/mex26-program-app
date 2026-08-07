@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Event: Master program item
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  start_time  DateTime
+  end_time    DateTime
+  location    String
+  type        EventType
+  visible_to_contact_types Json?
+
+  // Personalized agendas
+  userEvents      UserEvent[]
+  notifications   Notification[]
+  campaigns       NotificationCampaign[]
+
+  createdAt DateTime @default(now()) @map("createdat")
+  updatedAt DateTime @updatedAt @map("updatedat")
+
+  @@index([start_time])
+  @@index([type])
+}
+
+// Person: attendees, mentors, team, etc.
+model Person {
+  id             String   @id @default(cuid())
+  email          String?  @unique
+  user_id        String?  @unique
+  full_name      String
+  bio            String?
+  tagline        String?
+  photo_url      String?
+  linkedin_url   String?
+  company_name   String?
+  contact_type   String?
+  arrival_date   DateTime? @db.Timestamptz(6)
+  departure_date DateTime? @db.Timestamptz(6)
+  expertise_tags Json     @default("[]")
+  schedule_feedback           Json?
+  daily_checkin               Json?
+  post_program_expectations   Json?
+  fun_fact       String?
+  dni            String?
+
+  startup_id String?
+  startup    Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
+
+  // Relations
+  userEvents     UserEvent[]
+  notifications  Notification[]
+  campaignRecipients NotificationCampaignRecipient[]
+  createdCampaigns NotificationCampaign[] @relation("CampaignCreator")
+  pushSubscriptions PushSubscription[]
+  emOneOnOnes      OneOnOne[] @relation("OneOnOneExperienceMaker")
+  oneOnOneAudioSubmissions OneOnOneAudioSubmission[]
+  teamAudioNotes      TeamAudioNote[] @relation("TeamMemberNotes")
+  founderAudioNotes   TeamAudioNote[] @relation("FounderNotes")
+
+  createdAt DateTime @default(now()) @map("createdat")
+  updatedAt DateTime @updatedAt @map("updatedat")
+
+  @@index([startup_id])
+  @@index([full_name])
+  @@index([email])
+  @@index([user_id])
+}
+
+// Startup: participating companies
+model Startup {
+  id          String  @id @default(cuid())
+  name        String
+  tagline     String?
+  sector      String?
+  stage       String?
+  logo_url        String?
+  website_url     String?
+  founded_year    Int?
+  description     String?
+  one_pager_url  String?
+
+  people    Person[]
+  oneOnOnes OneOnOne[]
+  teamAudioNotes TeamAudioNote[]
+  createdAt DateTime @default(now()) @map("createdat")
+  updatedAt DateTime @updatedAt @map("updatedat")
+
+  @@index([name])
+}
+
+model OneOnOne {
+  id         String   @id @default(cuid())
+  startup_id String?
+  em_id      String
+  start_time DateTime
+  end_time   DateTime
+  location   String?
+  notes      String?
+  active_audio_url String?
+  active_audio_storage_path String?
+  active_audio_duration_sec Int?
+  active_audio_uploaded_at DateTime?
+  active_audio_status String?
+  audio_transcript String?
+  audio_transcript_updated_at DateTime?
+  createdAt  DateTime @default(now()) @map("createdat")
+  updatedAt  DateTime @updatedAt @map("updatedat")
+
+  startup  Startup? @relation(fields: [startup_id], references: [id], onDelete: Cascade)
+  em       Person   @relation("OneOnOneExperienceMaker", fields: [em_id], references: [id], onDelete: Cascade)
+  audioSubmissions OneOnOneAudioSubmission[]
+
+  @@index([startup_id, start_time])
+  @@index([em_id, start_time])
+}
+
+model OneOnOneAudioSubmission {
+  id               String   @id @default(cuid())
+  one_on_one_id    String
+  user_id          String
+  storage_path     String?
+  public_url       String?
+  mime_type        String?
+  file_size_bytes  Int?
+  duration_sec     Int?
+  status           String
+  error_message    String?
+  transcript_text  String?
+  transcript_error String?
+  transcribed_at   DateTime?
+  createdAt        DateTime @default(now()) @map("createdat")
+  updatedAt        DateTime @updatedAt @map("updatedat")
+
+  oneOnOne OneOnOne @relation(fields: [one_on_one_id], references: [id], onDelete: Cascade)
+  user     Person   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([one_on_one_id, createdAt(sort: Desc)])
+  @@index([user_id])
+}
+
+// Join table Person <-> Event for personal schedules
+model UserEvent {
+  id       String @id @default(cuid())
+  user_id  String
+  event_id String
+
+  user  Person @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  event Event  @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("createdat")
+
+  @@unique([user_id, event_id])
+  @@index([event_id])
+  @@index([user_id])
+}
+
+// In-app alerts tied to a user (person) and optionally an event
+model Notification {
+  id        String   @id @default(cuid())
+  user_id   String
+  event_id  String?
+  message   String
+  is_read   Boolean  @default(false)
+  sent_at   DateTime @default(now())
+  pushed_at DateTime?
+
+  user  Person @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  event Event?  @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  campaignRecipients NotificationCampaignRecipient[]
+
+  @@index([user_id, is_read])
+  @@index([user_id, sent_at])
+  @@index([pushed_at])
+  @@index([event_id])
+  @@index([sent_at])
+}
+
+enum NotificationCampaignStatus {
+  draft
+  scheduled
+  processing
+  sent
+  failed
+}
+
+enum CampaignRecipientDeliveryStatus {
+  pending
+  notification_created
+  pushed
+  failed
+}
+
+model NotificationCampaign {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  event_id  String?
+  filters_json Json
+  status    NotificationCampaignStatus @default(draft)
+  scheduled_for DateTime?
+  created_by String?
+  created_at DateTime @default(now())
+  sent_at   DateTime?
+  target_count Int @default(0)
+  created_notifications_count Int @default(0)
+  pushed_count Int @default(0)
+  error_message String?
+
+  event     Event?  @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  creator   Person? @relation("CampaignCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  recipients NotificationCampaignRecipient[]
+
+  @@index([status, scheduled_for])
+  @@index([created_at])
+  @@index([event_id])
+  @@index([created_by])
+}
+
+model NotificationCampaignRecipient {
+  id              String   @id @default(cuid())
+  campaign_id     String
+  user_id         String
+  notification_id String?
+  delivery_status CampaignRecipientDeliveryStatus @default(pending)
+  error_message   String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  campaign      NotificationCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  user          Person @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  notification  Notification? @relation(fields: [notification_id], references: [id], onDelete: SetNull)
+
+  @@unique([campaign_id, user_id])
+  @@index([campaign_id, delivery_status])
+  @@index([user_id])
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  user_id    String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  user_agent String?
+  createdAt  DateTime @default(now()) @map("createdat")
+  updatedAt  DateTime @updatedAt @map("updatedat")
+
+  user Person @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model HomeDailyContent {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date           DateTime @db.Date
+  phase_label    String?
+  badge_text     String?
+  title          String
+  subtitle       String?
+  body_text      String?
+  reflection_text String?
+  podcast_url          String?
+  podcast_title        String?
+  podcast_duration_sec Int?
+  media_album_url      String?
+  media_cover_url      String?
+  createdAt      DateTime @default(now()) @map("createdat")
+  updatedAt      DateTime @updatedAt @map("updatedat")
+
+  @@unique([date])
+  @@index([date])
+  @@map("home_daily_content")
+}
+
+model TeamAudioNote {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  team_member_id  String
+  target_type     String
+  startup_id      String?
+  founder_id      String?
+  storage_path    String?
+  public_url      String?
+  mime_type       String?
+  file_size_bytes Int?
+  duration_sec    Int?
+  status          String   @default("uploaded")
+  error_message   String?
+  transcript_text  String?
+  transcript_error String?
+  transcribed_at  DateTime?
+  notes           String?
+  createdAt       DateTime @default(now()) @map("createdat")
+  updatedAt       DateTime @updatedAt @map("updatedat")
+
+  teamMember Person  @relation("TeamMemberNotes", fields: [team_member_id], references: [id], onDelete: Cascade)
+  startup    Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
+  founder    Person?  @relation("FounderNotes", fields: [founder_id], references: [id], onDelete: SetNull)
+
+  @@index([team_member_id, createdAt(sort: Desc)])
+  @@index([startup_id])
+  @@index([founder_id])
+}
+
+enum EventType {
+  workshop
+  talk
+  networking
+  meal
+  activity
+  ceremony
+  mentoring
+  free_time
+  Demo
+  demo
+}
+

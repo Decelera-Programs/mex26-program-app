@@ -1,0 +1,20 @@
+.loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .grupo-rotatorio {
+    /* El centro del viewBox 84.4 es 42.2 */
+    transform-origin: 42.2px 42.2px;
+    animation: rotate-loader 2s linear infinite;
+  }
+  
+  @keyframes rotate-loader {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }

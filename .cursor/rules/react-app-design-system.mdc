@@ -1,0 +1,69 @@
+---
+description: Match existing React app look using current Tailwind and shared card patterns
+alwaysApply: true
+---
+
+# UI Rule: Home Page Is The Source Of Truth
+
+When editing or creating pages, the frontend design must follow the `Home` page look first. Treat `Home` as the baseline for spacing, heading hierarchy, section rhythm, and card stacking.
+
+## Required Layout Pattern
+
+- Use page shell: `px-5 pt-14 pb-6` for top-level pages.
+- Use section spacing like `mb-6`, `mt-6`, and container gaps like `space-y-6`/`space-y-7` to create clear separation between cards.
+- Match `Home` heading hierarchy: pretitle/supporting line, then main title with `text-3xl font-bold text-foreground mt-1 font-display` when appropriate.
+- Section labels should follow the `Home` pattern: `text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3`.
+- Subtitles: `text-muted-foreground text-xs mt-0.5`.
+
+## Required Card Pattern
+
+- Prefer `.app-card` and `.app-card-interactive` for reusable surfaces.
+- For custom blocks, match existing card style: `bg-card rounded-2xl border border-border/50`.
+- Use `overflow-hidden` + `divide-y divide-border/30` for list rows inside cards.
+- Keep rounded pills/tags with `rounded-full` and soft backgrounds like `bg-primary/10`.
+- Do not add decorative background shapes (floating squares/circles/blobs) behind card content.
+- Avoid icon background squares unless they communicate state; prefer clean standalone icons.
+- Avoid square swatch blocks for visual-only accents; use subtle pills/lines/dots instead.
+- Keep row text away from right borders by adding extra horizontal padding (`px-6`) and text-side right padding (`pr-3` or `pr-4`) when needed.
+- Avoid solid accent-background heading blocks unless explicitly requested; prefer neutral heading cards with accent used in chips/borders only.
+
+## Colors, Typography, and Tokens
+
+- Use theme tokens (`text-foreground`, `text-muted-foreground`, `bg-card`, `border-border`), not hardcoded random colors.
+- The only strong brand accent is cyan (`#1FD0EF` / `primary`), used intentionally for highlights.
+- Keep body text compact (`text-sm`, `text-xs`) and clear hierarchy via weight, not oversized text.
+
+## Motion and Interaction
+
+- Use subtle `framer-motion` enter animations (`y: -10`/`16`, short delays).
+- Hover/press feedback should stay soft (`hover:bg-primary/20`, tiny scale, no dramatic effects).
+- Preserve readable states: unread, active, selected via border/background contrast.
+
+## Page Intent to Preserve
+
+- `home`: greeting header, up-next block, stacked cards (`card-list`).
+- `schedule`: day selector chips + detailed/compact event cards.
+- `notifications`: stacked interactive cards with unread emphasis.
+- `details`: large title, metadata cards, about/rating sections.
+
+## Applying This to MediaKit and Logistics
+
+- Keep current structure and restyle by reusing shared card patterns before adding new custom CSS.
+- If a style repeats 3+ times, move it to `index.css` as a semantic class (same approach as existing `event-detail-*` helpers).
+- Do not introduce a separate visual language for these pages; they must look native to the same app.
+- Keep page headings exactly aligned with main page pattern (`text-2xl font-bold text-foreground font-display` + `text-muted-foreground text-xs mt-0.5`).
+- In conflicts between page-specific styling and shared styling, prefer the `Home` visual language.
+- Apply the same card treatment to all content groups in a page (not only the first block).
+- Implement spacing/padding consistency with reusable CSS classes in `index.css` (for example section gap classes and row/content padding classes), not only inline utility classes.
+- For visible UI refinements (padding, spacing, emphasis, icon/text distance), prefer editing reusable CSS classes in `index.css` first, then reference those classes in JSX.
+
+## Example (Preferred)
+
+```css
+.logistics-section-card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+```

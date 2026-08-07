@@ -1,0 +1,40 @@
+---
+description: Standard workflow for app analysis with runtime evidence and actionable improvements
+alwaysApply: true
+---
+
+# App Analysis Workflow
+
+When asked to analyze app health or performance, follow this workflow.
+
+## 1) Runtime Setup
+
+- Check whether a dev server is already running before starting a new one.
+- Start `npm run dev` only if no suitable dev server is active.
+- If startup fails, report the exact blocking error before continuing.
+
+## 2) Collect Evidence (Not Guesses)
+
+- Gather terminal/build output: errors, warnings, failed builds, hot-reload failures.
+- Gather runtime signals: browser console errors, failed network requests, slow endpoints, repeated retries.
+- Include only issues observed in evidence; avoid speculative findings.
+
+## 3) Performance Analysis Scope
+
+- Evaluate at least these areas when relevant: render behavior, network/API latency, bundle/load cost, unnecessary rerenders, and expensive list rendering.
+- Prioritize issues by user impact and frequency.
+
+## 4) Output Format
+
+- Return the top 3-5 improvements, ranked `high`/`medium`/`low`.
+- For each item include:
+  - observed signal
+  - likely root cause
+  - concrete fix
+  - verification step
+
+## 5) Safety and Efficiency
+
+- Do not duplicate long-running dev servers.
+- Prefer minimal commands and focused checks.
+- If evidence is incomplete, state what is missing and how to capture it.

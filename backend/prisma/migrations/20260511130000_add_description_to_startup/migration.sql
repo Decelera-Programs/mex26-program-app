@@ -1,0 +1,1 @@
+ALTER TABLE "Startup" ADD COLUMN IF NOT EXISTS "description" TEXT;
