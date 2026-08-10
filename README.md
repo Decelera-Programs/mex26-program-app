@@ -18,7 +18,6 @@ cd backend
 npm install
 cp .env.example .env
 npm run prisma:generate
-npm run prisma:migrate
 npm run dev
 ```
 
@@ -27,6 +26,8 @@ cd ..
 npm install
 npm run dev
 ```
+
+> **Schema changes do not go through Prisma Migrate.** The database (Supabase) is managed directly — schema changes are applied there (SQL editor / Supabase MCP), never via `prisma migrate dev|deploy` against this project's database. After any schema change, run `npm run prisma:pull` (`prisma db pull`) in `backend/` to refresh `schema.prisma`, then `npm run prisma:generate`. `backend/prisma/migrations.legacy/` is kept only for historical reference and is intentionally not named `migrations` so Prisma CLI won't pick it up.
 
 ## Two modes (pick one)
 
@@ -243,8 +244,8 @@ Think of `src/api/dataService.js` as the **single source of truth** for the UI: 
 - `npm run dev`: run Express server with TS watch (`tsx`)
 - `npm run build`: TypeScript compile
 - `npm run start`: run compiled server from `dist/`
-- `npm run prisma:generate`: generate Prisma client
-- `npm run prisma:migrate`: create/apply migrations
+- `npm run prisma:generate`: generate Prisma client from `schema.prisma`
+- `npm run prisma:pull`: re-introspect `schema.prisma` from the live database (run after any schema change made in Supabase)
 - `npm run prisma:studio`: open Prisma Studio
 
 ## “Where do I change…?” (fast pointers)
@@ -283,5 +284,5 @@ In `src/api/dataService.js`, change `getCurrentUser()`:
 ## Troubleshooting
 
 - **PWA cache looks “stuck”**: service workers cache aggressively. In the browser devtools, unregister the SW / clear site data, then reload.
-- **Backend DB issues**: confirm `backend/.env` exists and `DATABASE_URL` points to a writable path; rerun `npm run prisma:migrate`.
+- **Backend DB issues**: confirm `backend/.env` exists and `DATABASE_URL` points at the right Supabase project; if `schema.prisma` looks out of date, run `npm run prisma:pull && npm run prisma:generate`. Do not run `prisma migrate dev|deploy` against this database — schema changes are made directly in Supabase (see Quickstart note above).
 - **CORS**: backend enables CORS broadly; if you lock this down later, ensure the frontend origin is allowed.

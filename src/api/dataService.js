@@ -11,7 +11,10 @@ let accessTokenCache = { value: "", expiresAt: 0, promise: null };
 const userIdByIdentifierCache = new Map();
 
 if (supabase) {
-  supabase.auth.onAuthStateChange(() => {
+  supabase.auth.onAuthStateChange((event) => {
+    // TOKEN_REFRESHED fires silently ~hourly while the session stays open — it's the
+    // same identity, just a renewed JWT, so it must not blow away unrelated caches.
+    if (event !== "SIGNED_IN" && event !== "SIGNED_OUT") return;
     currentUserCache = { value: undefined, expiresAt: 0, promise: null };
     accessTokenCache = { value: "", expiresAt: 0, promise: null };
     peopleCache = { value: null, expiresAt: 0, promise: null };

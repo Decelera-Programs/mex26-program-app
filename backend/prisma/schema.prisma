@@ -51,6 +51,18 @@ model Person {
   post_program_expectations   Json?
   fun_fact       String?
   dni            String?
+  olbi_brs       Json?
+  olbi_brs_post  Json?
+  paellas        Json?
+  human_dd_compact Json?
+  decelera_games Json?
+  nps_forms      Json?
+  /// Resultados del cuestionario Founder DNA. Estructura: {
+  ///   scores: { integrity, trust_conflict, cool_head, purpose, ambition, confidence, vision_alignment },
+  ///   answers: { q1, q2, q3, q4, q5, q6 },
+  ///   completed_at: timestamptz
+  /// }
+  legal_maze     Json?
 
   startup_id String?
   startup    Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
@@ -65,6 +77,8 @@ model Person {
   oneOnOneAudioSubmissions OneOnOneAudioSubmission[]
   teamAudioNotes      TeamAudioNote[] @relation("TeamMemberNotes")
   founderAudioNotes   TeamAudioNote[] @relation("FounderNotes")
+  evaluatedHumanDDs   HumanDD[] @relation("HumanDDEvaluator")
+  founderHumanDDs     HumanDD[] @relation("HumanDDFounder")
 
   createdAt DateTime @default(now()) @map("createdat")
   updatedAt DateTime @updatedAt @map("updatedat")
@@ -87,10 +101,12 @@ model Startup {
   founded_year    Int?
   description     String?
   one_pager_url  String?
+  challenges      Json?
 
   people    Person[]
   oneOnOnes OneOnOne[]
   teamAudioNotes TeamAudioNote[]
+  humanDDs  HumanDD[]
   createdAt DateTime @default(now()) @map("createdat")
   updatedAt DateTime @updatedAt @map("updatedat")
 
@@ -112,6 +128,7 @@ model OneOnOne {
   active_audio_status String?
   audio_transcript String?
   audio_transcript_updated_at DateTime?
+  name       String?
   createdAt  DateTime @default(now()) @map("createdat")
   updatedAt  DateTime @updatedAt @map("updatedat")
 
@@ -308,6 +325,25 @@ model TeamAudioNote {
   @@index([team_member_id, createdAt(sort: Desc)])
   @@index([startup_id])
   @@index([founder_id])
+}
+
+model HumanDD {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  evaluator_id   String
+  event          String
+  founder_id     String?
+  startup_id     String?
+  scores         Json     @default("{}")
+  submission_date DateTime? @db.Date
+  createdAt      DateTime @default(now()) @map("createdat")
+
+  evaluator Person   @relation("HumanDDEvaluator", fields: [evaluator_id], references: [id], onDelete: Cascade)
+  founder   Person?  @relation("HumanDDFounder", fields: [founder_id], references: [id], onDelete: SetNull)
+  startup   Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
+
+  @@index([startup_id])
+  @@index([founder_id])
+  @@index([evaluator_id])
 }
 
 enum EventType {
