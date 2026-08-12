@@ -214,29 +214,6 @@ async function resolveAccessibleOneOnOneForPerson(
   });
 }
 
-async function normalizeNotificationReadState() {
-  await prisma.$executeRawUnsafe(`
-    DO $$
-    BEGIN
-      BEGIN
-        UPDATE "Notification"
-        SET "is_read" = false
-        WHERE "is_read" IS NULL;
-      EXCEPTION WHEN undefined_table THEN
-        NULL;
-      END;
-
-      BEGIN
-        UPDATE notification
-        SET is_read = false
-        WHERE is_read IS NULL;
-      EXCEPTION WHEN undefined_table THEN
-        NULL;
-      END;
-    END $$;
-  `);
-}
-
 async function dispatchDuePushNotifications(now = new Date()) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return { processed: 0, pushed: 0 };
 
@@ -641,12 +618,6 @@ function isMissingTableError(error: unknown, modelName: string) {
   return maybe.code === "P2021" && maybe.meta?.modelName === modelName;
 }
 
-function isInvalidEventTypeEnumError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const maybe = error as { message?: string };
-  return String(maybe.message || "").includes("not found in enum 'EventType'");
-}
-
 function parseScheduleDayKey(raw: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
   const parsed = new Date(`${raw}T00:00:00.000Z`);
@@ -699,126 +670,6 @@ function slugifyEventTitle(rawTitle: string) {
 function scheduleFeedbackKey(eventTitle: string, dayNumber: number) {
   const safeTitle = slugifyEventTitle(eventTitle) || "event";
   return `${safeTitle}_${dayNumber}`;
-}
-
-async function listEventsWithRawFallback() {
-  const mapRows = (
-    rows: Array<{
-      id: string;
-      title: string;
-      description: string | null;
-      start_time: Date;
-      end_time: Date;
-      location: string;
-      type: string;
-      visible_to_contact_types: unknown;
-      created_at: Date;
-      updated_at: Date;
-    }>,
-  ) =>
-    rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      start_time: row.start_time,
-      end_time: row.end_time,
-      location: row.location,
-      type: row.type,
-      visible_to_contact_types: row.visible_to_contact_types,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
-
-  const queryAttempts = [
-    `
-      SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, e.type::text AS type, e.visible_to_contact_types,
-             e.createdat AS created_at, e.updatedat AS updated_at
-      FROM "Event" e
-      ORDER BY e.start_time ASC
-    `,
-    `
-      SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, e.type::text AS type, e.visible_to_contact_types,
-             e.createdat AS created_at, e.updatedat AS updated_at
-      FROM event e
-      ORDER BY e.start_time ASC
-    `,
-    `
-      SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, e.type::text AS type, e.visible_to_contact_types,
-             e.created_at, e.updated_at
-      FROM "Event" e
-      ORDER BY e.start_time ASC
-    `,
-    `
-      SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, e.type::text AS type, e.visible_to_contact_types,
-             e.created_at, e.updated_at
-      FROM event e
-      ORDER BY e.start_time ASC
-    `,
-  ];
-
-  for (const sql of queryAttempts) {
-    try {
-      const rows = await prisma.$queryRawUnsafe<
-        Array<{
-          id: string;
-          title: string;
-          description: string | null;
-          start_time: Date;
-          end_time: Date;
-          location: string;
-          type: string;
-          visible_to_contact_types: unknown;
-          created_at: Date;
-          updated_at: Date;
-        }>
-      >(sql);
-      return mapRows(rows);
-    } catch {
-      // Continue trying compatibility query variants.
-    }
-  }
-
-  return [];
-}
-
-async function normalizeEventTypeEnumValues() {
-  const renames: Array<[string, string]> = [
-    ["Workshop", "workshop"],
-    ["Talk", "talk"],
-    ["Demo", "activity"],
-    ["demo", "activity"],
-    ["Networking", "networking"],
-    ["Meal", "meal"],
-    ["Activity", "activity"],
-    ["Ceremony", "ceremony"],
-    ["Mentoring", "mentoring"],
-    ["Free Time", "free_time"],
-    ["Free_time", "free_time"],
-    ["Free-Time", "free_time"],
-  ];
-
-  for (const [from, to] of renames) {
-    await prisma.$executeRawUnsafe(`
-      DO $$
-      BEGIN
-        BEGIN
-          ALTER TYPE "EventType" RENAME VALUE '${from}' TO '${to}';
-        EXCEPTION WHEN undefined_object OR invalid_parameter_value THEN
-          NULL;
-        END;
-      END $$;
-    `);
-    await prisma.$executeRawUnsafe(`
-      DO $$
-      BEGIN
-        BEGIN
-          ALTER TYPE event_type RENAME VALUE '${from}' TO '${to}';
-        EXCEPTION WHEN undefined_object OR invalid_parameter_value THEN
-          NULL;
-        END;
-      END $$;
-    `);
-  }
 }
 
 function getBearerToken(req: Request) {
@@ -1267,17 +1118,7 @@ app.get("/events", async (req, res) => {
     res.set("Cache-Control", "private, max-age=30");
     res.json(visibleEvents);
   } catch (error) {
-    const fallbackEvents = await listEventsWithRawFallback().catch(() => []);
-    const contactType = normalizeContactType(person.contact_type);
-    const visibleEvents = contactType === "team"
-      ? fallbackEvents
-      : fallbackEvents.filter((event) => isEventVisibleForContactType(event, contactType));
-    if (fallbackEvents.length > 0 || isInvalidEventTypeEnumError(error)) {
-      res.set("Cache-Control", "private, max-age=30");
-      res.json(visibleEvents);
-      return;
-    }
-    res.status(500).json({ error: "Failed to load events" });
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load events" });
   }
 });
 
@@ -2417,54 +2258,44 @@ app.get("/jobs/notifications/push-debug", async (_req, res) => {
 
 const port = process.env.PORT ? Number(process.env.PORT) : 8787;
 
-normalizeEventTypeEnumValues()
-  .catch(() => {
-    // Ignore normalization errors; route-level handling keeps API alive.
+runPushDispatch("startup")
+  .then((result) => {
+    if (result.processed > 0) {
+      return;
+    }
   })
-  .finally(() => {
-    normalizeNotificationReadState().catch(() => {
-      // Ignore normalization errors; runtime handlers remain defensive.
-    });
+  .catch(() => {
+    // Ignore to keep server alive.
+  });
 
-    runPushDispatch("startup")
-      .then((result) => {
-        if (result.processed > 0) {
-          return;
-        }
-      })
-      .catch(() => {
-        // Ignore to keep server alive.
-      });
+runScheduledCampaignDispatch(new Date()).catch(() => {
+  // Ignore to keep server alive.
+});
 
-    runScheduledCampaignDispatch(new Date()).catch(() => {
+// Poll due notifications and deliver push payloads.
+setInterval(() => {
+  runPushDispatch("interval")
+    .then(() => {
+      return;
+    })
+    .catch(() => {
       // Ignore to keep server alive.
     });
+}, 30000);
 
-    // Poll due notifications and deliver push payloads.
-    setInterval(() => {
-      runPushDispatch("interval")
-        .then(() => {
-          return;
-        })
-        .catch(() => {
-          // Ignore to keep server alive.
-        });
-    }, 30000);
-
-    setInterval(() => {
-      runScheduledCampaignDispatch(new Date()).catch(() => {
-        // Ignore to keep server alive.
-      });
-    }, 30000);
-
-    // 30-minute reminders disabled — notifications are managed manually in the DB.
-    // setInterval(() => {
-    //   triggerThirtyMinuteReminders(new Date()).catch(() => {});
-    // }, 60000);
-
-    app.listen(port, () => {
-      // eslint-disable-next-line no-console
-      console.log(`Backend listening on http://localhost:${port}`);
-    });
+setInterval(() => {
+  runScheduledCampaignDispatch(new Date()).catch(() => {
+    // Ignore to keep server alive.
   });
+}, 30000);
+
+// 30-minute reminders disabled — notifications are managed manually in the DB.
+// setInterval(() => {
+//   triggerThirtyMinuteReminders(new Date()).catch(() => {});
+// }, 60000);
+
+app.listen(port, () => {
+  // eslint-disable-next-line no-console
+  console.log(`Backend listening on http://localhost:${port}`);
+});
 

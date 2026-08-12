@@ -16,7 +16,7 @@ model Event {
   start_time  DateTime
   end_time    DateTime
   location    String
-  type        EventType
+  type        String
   visible_to_contact_types Json?
 
   // Personalized agendas
@@ -346,16 +346,4 @@ model HumanDD {
   @@index([evaluator_id])
 }
 
-enum EventType {
-  workshop
-  talk
-  networking
-  meal
-  activity
-  ceremony
-  mentoring
-  free_time
-  Demo
-  demo
-}
 
