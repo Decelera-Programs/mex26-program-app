@@ -68,8 +68,9 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Menorca Program";
   const body = payload.body || "You have a new notification";
   const eventId = payload.eventId || null;
+  const personId = payload.personId || null;
   const notificationId = payload.notificationId || null;
-  const baseUrl = eventId ? `/event/${eventId}` : "/notifications";
+  const baseUrl = eventId ? `/event/${eventId}` : personId ? `/person/${personId}` : "/notifications";
   const targetUrl = notificationId ? `${baseUrl}?notif=${notificationId}` : baseUrl;
   event.waitUntil(
     self.registration.showNotification(title, {

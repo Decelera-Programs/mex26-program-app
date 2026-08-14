@@ -288,6 +288,7 @@ export default function Notifications() {
                     onClick={async () => {
                       await onMarkAsRead(notif);
                       if (notif.event_id) openEventModal(notif.event_id);
+                      else if (notif.counterpart_person_id) navigate(`/person/${notif.counterpart_person_id}`);
                     }}
                     className="notification-card w-full text-left rounded-[20px] border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
                     style={{ background: "#FFFFFF", borderColor: notif.is_read ? "#EEF2F5" : "#D6EEF5" }}

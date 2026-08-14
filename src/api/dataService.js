@@ -282,6 +282,11 @@ export async function listEvents() {
   return eventsCache.promise;
 }
 
+export async function getMyTodayMatch() {
+  const payload = await api("/matches/me");
+  return payload?.match || null;
+}
+
 export async function getHomeDailyContent(dateKey) {
   const query = dateKey ? `?date=${encodeURIComponent(dateKey)}` : "";
   return api(`/home-content${query}`);

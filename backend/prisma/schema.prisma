@@ -79,6 +79,8 @@ model Person {
   founderAudioNotes   TeamAudioNote[] @relation("FounderNotes")
   evaluatedHumanDDs   HumanDD[] @relation("HumanDDEvaluator")
   founderHumanDDs     HumanDD[] @relation("HumanDDFounder")
+  founderMatches      Match[] @relation("MatchFounder")
+  emMatches           Match[] @relation("MatchExperienceMaker")
 
   createdAt DateTime @default(now()) @map("createdat")
   updatedAt DateTime @updatedAt @map("updatedat")
@@ -107,6 +109,7 @@ model Startup {
   oneOnOnes OneOnOne[]
   teamAudioNotes TeamAudioNote[]
   humanDDs  HumanDD[]
+  matches   Match[]
   createdAt DateTime @default(now()) @map("createdat")
   updatedAt DateTime @updatedAt @map("updatedat")
 
@@ -189,9 +192,11 @@ model Notification {
   is_read   Boolean  @default(false)
   sent_at   DateTime @default(now())
   pushed_at DateTime?
+  match_id  String?  @db.Uuid
 
   user  Person @relation(fields: [user_id], references: [id], onDelete: Cascade)
   event Event?  @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  match Match?  @relation(fields: [match_id], references: [id], onDelete: SetNull)
   campaignRecipients NotificationCampaignRecipient[]
 
   @@index([user_id, is_read])
@@ -199,6 +204,7 @@ model Notification {
   @@index([pushed_at])
   @@index([event_id])
   @@index([sent_at])
+  @@index([match_id])
 }
 
 enum NotificationCampaignStatus {
@@ -346,4 +352,27 @@ model HumanDD {
   @@index([evaluator_id])
 }
 
+model Match {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_date       DateTime @db.Date
+  founder_id       String
+  em_id            String
+  startup_id       String?
+  score            Float
+  candidate_pool   Json
+  selection_method String
+  reason_text      String
+  ai_raw_response  Json?
+  createdAt        DateTime @default(now()) @map("createdat")
 
+  founder Person   @relation("MatchFounder", fields: [founder_id], references: [id], onDelete: Cascade)
+  em      Person   @relation("MatchExperienceMaker", fields: [em_id], references: [id], onDelete: Cascade)
+  startup Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@unique([founder_id, em_id])
+  @@unique([founder_id, match_date])
+  @@index([em_id])
+  @@index([match_date])
+  @@map("match")
+}

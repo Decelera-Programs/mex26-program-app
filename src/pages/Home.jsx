@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
+import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyTodayMatch, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
+import MatchCard from "../components/MatchCard";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -91,6 +92,7 @@ export default function Home() {
   const [peoplePreview, setPeoplePreview] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [myOneOnOnesCount, setMyOneOnOnesCount] = useState(0);
+  const [todayMatch, setTodayMatch] = useState(null);
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [checkinDone, setCheckinDone] = useState(false);
@@ -106,15 +108,17 @@ export default function Home() {
 
     async function loadHomeData() {
       try {
-        const [homeData, checkinData, peopleData, oneOnOnesData, userData] = await Promise.all([
+        const [homeData, checkinData, peopleData, oneOnOnesData, userData, matchData] = await Promise.all([
           getHomeDailyContent(todayKey).catch(() => null),
           getMyDailyCheckin(todayKey).catch(() => null),
           listPeople().catch(() => []),
           listMyOneOnOnes().catch(() => []),
           getCurrentUser().catch(() => null),
+          getMyTodayMatch().catch(() => null),
         ]);
         if (cancelled) return;
         if (userData) setCurrentUser(userData);
+        setTodayMatch(matchData || null);
 
         if (homeData) {
           setHeroContent({
@@ -370,6 +374,12 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <AnimatePresence>
+        {todayMatch ? (
+          <MatchCard match={todayMatch} onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)} />
+        ) : null}
+        </AnimatePresence>
 
         <AnimatePresence>
         {myOneOnOnesCount > 0 ? (
