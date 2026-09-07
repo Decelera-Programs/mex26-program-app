@@ -147,10 +147,10 @@ Auth: `requireSupabaseAuth` validates the `Authorization: Bearer <jwt>` on all r
 3. **Push dispatch** — deliver Web Push for `Notification`s past their `sent_at`.
    (Also runs on a 30s interval inside the server.)
 4. **1:1 / team-note transcription** — download audio from Storage → OpenAI → save transcript.
-5. **Daily matching** — for each present founder without a match today, score experience makers by
-   overlap between their `expertise_tags` and the founder's tags + weakest `startup.challenges`
-   sections, shortlist the top candidates, let OpenAI pick one with a reason (deterministic
-   top-score fallback), then create a `Match` + two `Notification`s.
+5. **Daily matching** — one informal founder ↔ experience-maker suggestion per person per day:
+   affinity-score every candidate EM, then a global assignment (per-EM daily capacity, repeated-pair
+   cooldown, feedback-weighted), then OpenAI writes the conversation topic + opener for the chosen
+   pair. Creates a `Match` + two `Notification`s. Full design: [`docs/matching.md`](docs/matching.md).
 
 ## Time zones
 
