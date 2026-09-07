@@ -14,7 +14,7 @@ export default function MatchCard({ match, onClick }) {
   const [imageFailed, setImageFailed] = useState(false);
   if (!match?.counterpart) return null;
 
-  const { counterpart, reason_text: reasonText } = match;
+  const { counterpart, reason_text: reasonText, opener, role } = match;
   const normalizedContactType = String(counterpart.contact_type || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   const accentColor = typeColors[normalizedContactType] || "#1FD0EF";
   const initials = (counterpart.full_name || "")
@@ -99,6 +99,24 @@ export default function MatchCard({ match, onClick }) {
               }}
             >
               {reasonText}
+            </p>
+          )}
+          {role === "founder" && opener && (
+            <p
+              style={{
+                fontSize: 11,
+                fontStyle: "italic",
+                color: "rgba(255,255,255,0.55)",
+                marginTop: 6,
+                paddingLeft: 8,
+                borderLeft: "2px solid rgba(255,255,255,0.2)",
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              &ldquo;{opener}&rdquo;
             </p>
           )}
         </div>

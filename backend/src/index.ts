@@ -108,7 +108,10 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
 const matchChoiceSchema = z
   .object({
     selected_em_id: z.string().min(1),
-    reason: z.string().min(1).max(500),
+    // A concrete thing for the founder to talk to this EM about, and a first line
+    // they can literally say to start the conversation informally.
+    topic: z.string().min(1).max(400),
+    opener: z.string().min(1).max(400),
   })
   .strict();
 
@@ -768,7 +771,7 @@ function scoreCandidates(
 async function pickMatchWithOpenAI(
   founder: MatchCandidatePerson,
   shortlist: Array<{ em: MatchCandidatePerson; score: number }>,
-): Promise<{ selected_em_id: string; reason: string }> {
+): Promise<{ selected_em_id: string; topic: string; opener: string }> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured in backend env");
   }
@@ -808,18 +811,23 @@ async function pickMatchWithOpenAI(
       body: JSON.stringify({
         model: OPENAI_MATCHING_MODEL,
         temperature: 0.4,
-        max_tokens: 400,
+        max_tokens: 500,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content:
-              "Eres un asistente de matchmaking para el programa Decelera Mexico 2026. " +
-              "Se te dara un founder con sus retos actuales y una lista corta (shortlist) de experience makers " +
-              "(mentores) candidatos. Debes elegir EXACTAMENTE UNO de los ids de la shortlist (nunca inventes un id " +
-              "que no este en la lista) y explicar en maximo 280 caracteres, citando datos concretos (tags de " +
-              "expertise y/o el area de reto especifica), por que tiene sentido esa combinacion. Responde SOLO un " +
-              'JSON con este formato exacto: {"selected_em_id": string, "reason": string}.',
+              "Eres el asistente de conexiones informales del programa Decelera Mexico 2026. " +
+              "Cada dia se sugiere a un founder que hable de forma informal (en una pausa o comida, SIN agendar " +
+              "reunion) con un experience maker para una conversacion corta y util. " +
+              "Se te da un founder con su reto vivo y una shortlist de experience makers candidatos. Debes: " +
+              "1) Elegir EXACTAMENTE UNO de los ids de la shortlist (nunca inventes un id que no este en la lista). " +
+              "2) \"topic\": en espanol, maximo 180 caracteres. UN tema concreto y accionable del que hablar, " +
+              "anclado en el reto real del founder y en algo especifico del expertise o la experiencia de ese EM. " +
+              "Nada generico. " +
+              "3) \"opener\": en espanol, maximo 160 caracteres. Una frase en primera persona que el founder pueda " +
+              "decirle literalmente para arrancar la conversacion de forma natural e informal. " +
+              'Responde SOLO un JSON con este formato exacto: {"selected_em_id": string, "topic": string, "opener": string}.',
           },
           { role: "user", content: JSON.stringify({ founder: founderContext, candidates }) },
         ],
@@ -847,7 +855,11 @@ async function pickMatchWithOpenAI(
   return parsed;
 }
 
-function fallbackMatchReason(founder: MatchCandidatePerson, em: MatchCandidatePerson) {
+// Used when OpenAI is unavailable: a deterministic topic + opener from tag overlap.
+function fallbackMatchTopic(
+  founder: MatchCandidatePerson,
+  em: MatchCandidatePerson,
+): { topic: string; opener: string } {
   const founderTags = hasMeaningfulExpertiseTags(founder.expertise_tags) ? founder.expertise_tags : [];
   const emTags = hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags : [];
   const challengeTags = tagsFromChallengeSections(founder.startup?.challenges);
@@ -857,9 +869,13 @@ function fallbackMatchReason(founder: MatchCandidatePerson, em: MatchCandidatePe
       ...emTags.filter((t) => founderTags.includes(t)),
     ]),
   );
-  return shared.length > 0
-    ? `Emparejados por afinidad en: ${shared.join(", ")}.`
-    : "Emparejados por afinidad en areas de expertise complementarias.";
+  const emFirstName = (em.full_name || "").trim().split(/\s+/)[0] || "";
+  const focus = shared[0] || "un reto que tienes ahora mismo";
+  const topic = shared.length > 0
+    ? `Habla con ${emFirstName || "este EM"} sobre ${shared.slice(0, 3).join(", ")}: es su area.`
+    : `Teneis expertise complementario; busca a ${emFirstName || "este EM"} para contrastar tu reto actual.`;
+  const opener = `Hola ${emFirstName}, estoy dandole vueltas a ${focus} y creo que tu has pasado por esto. ¿Tienes un momento en la proxima pausa?`;
+  return { topic, opener };
 }
 
 async function runDailyMatchingJob(limit = 50) {
@@ -890,16 +906,15 @@ async function runDailyMatchingJob(limit = 50) {
       }
 
       let selectedEmId = shortlist[0].em.id;
-      let reasonText = fallbackMatchReason(founder, shortlist[0].em);
+      let { topic, opener } = fallbackMatchTopic(founder, shortlist[0].em);
       let selectionMethod = "fallback_top_score";
-      let aiRawResponse: unknown = null;
 
       try {
         const aiChoice = await pickMatchWithOpenAI(founder, shortlist);
         selectedEmId = aiChoice.selected_em_id;
-        reasonText = aiChoice.reason;
+        topic = aiChoice.topic;
+        opener = aiChoice.opener;
         selectionMethod = "ai";
-        aiRawResponse = aiChoice;
       } catch {
         // Keep the deterministic top-score fallback already assigned above.
       }
@@ -915,8 +930,10 @@ async function runDailyMatchingJob(limit = 50) {
           score: selected.score,
           candidate_pool: shortlist.map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
           selection_method: selectionMethod,
-          reason_text: reasonText,
-          ai_raw_response: aiRawResponse as Prisma.InputJsonValue,
+          // reason_text holds the suggested conversation topic (headline shown in the UI).
+          reason_text: topic,
+          // opener lives here (no dedicated column yet); /matches/me reads it back.
+          ai_raw_response: { topic, opener, source: selectionMethod } as Prisma.InputJsonValue,
         },
       });
 
@@ -925,14 +942,14 @@ async function runDailyMatchingJob(limit = 50) {
           {
             id: crypto.randomUUID(),
             user_id: founder.id,
-            message: reasonText,
+            message: topic,
             sent_at: new Date(),
             match_id: createdMatch.id,
           },
           {
             id: crypto.randomUUID(),
             user_id: selected.em.id,
-            message: reasonText,
+            message: topic,
             sent_at: new Date(),
             match_id: createdMatch.id,
           },
@@ -1654,8 +1671,13 @@ app.get("/matches/me", async (req, res) => {
   }
 
   try {
+    // Only today's match — the recommendation is per-day and yesterday's is stale.
+    const todayMatchDate = new Date(`${todayDateKey(MATCHING_TIMEZONE)}T00:00:00.000Z`);
     const match = await prisma.match.findFirst({
-      where: { OR: [{ founder_id: person.id }, { em_id: person.id }] },
+      where: {
+        match_date: todayMatchDate,
+        OR: [{ founder_id: person.id }, { em_id: person.id }],
+      },
       orderBy: { createdAt: "desc" },
       include: {
         founder: { select: personSafeSelect },
@@ -1670,12 +1692,16 @@ app.get("/matches/me", async (req, res) => {
 
     const isFounder = match.founder_id === person.id;
     const counterpart = isFounder ? match.em : match.founder;
+    const aiRaw = (match.ai_raw_response ?? null) as { opener?: unknown } | null;
+    const opener =
+      aiRaw && typeof aiRaw === "object" && typeof aiRaw.opener === "string" ? aiRaw.opener : null;
 
     res.json({
       match: {
         id: match.id,
         match_date: match.match_date,
         reason_text: match.reason_text,
+        opener,
         createdAt: match.createdAt,
         role: isFounder ? "founder" : "experience_maker",
         counterpart: {
