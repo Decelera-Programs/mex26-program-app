@@ -363,6 +363,10 @@ model Match {
   selection_method String
   reason_text      String
   ai_raw_response  Json?
+  /// Per-role feedback on the match. Shape:
+  /// { founder?: { talked: bool, useful: bool|null, at: timestamptz },
+  ///   em?:      { talked: bool, useful: bool|null, at: timestamptz } }
+  feedback         Json?
   createdAt        DateTime @default(now()) @map("createdat")
 
   founder Person   @relation("MatchFounder", fields: [founder_id], references: [id], onDelete: Cascade)

@@ -117,6 +117,21 @@ const matchTopicSchema = z
   })
   .strict();
 
+// One tap after a match: "did you talk?" and, if so, "was it useful?".
+const matchFeedbackSchema = z
+  .object({
+    talked: z.boolean(),
+    useful: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+// EM-level reputation: EMs that founders repeatedly find unhelpful get their
+// match scores dampened. Needs a minimum sample size so one bad rating can't
+// sink an EM, and a lookback so old feedback fades.
+const MATCH_FEEDBACK_LOOKBACK_DAYS = 14;
+const MATCH_FEEDBACK_MIN_SAMPLES = 2;
+const MATCH_FEEDBACK_MIN_MULTIPLIER = 0.4;
+
 const campaignFiltersSchema = z
   .object({
     contact_types: z.array(z.string().min(1)).optional(),
@@ -872,6 +887,37 @@ function fallbackMatchTopic(
   return { topic, opener };
 }
 
+// Per-EM score multiplier (<= 1) derived from recent founder "useful" ratings.
+// EMs with too few ratings are left untouched.
+async function loadEmScoreMultipliers(): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - MATCH_FEEDBACK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.match.findMany({
+    where: { createdAt: { gte: since }, feedback: { not: Prisma.DbNull } },
+    select: { em_id: true, feedback: true },
+  });
+
+  const tally = new Map<string, { useful: number; total: number }>();
+  for (const row of rows) {
+    const fb = row.feedback as { founder?: { useful?: unknown } } | null;
+    const founderUseful = fb?.founder?.useful;
+    if (typeof founderUseful !== "boolean") continue;
+    const t = tally.get(row.em_id) ?? { useful: 0, total: 0 };
+    t.total += 1;
+    if (founderUseful) t.useful += 1;
+    tally.set(row.em_id, t);
+  }
+
+  const multipliers = new Map<string, number>();
+  for (const [emId, t] of tally) {
+    if (t.total < MATCH_FEEDBACK_MIN_SAMPLES) continue;
+    const rate = t.useful / t.total; // 0..1
+    const mult =
+      MATCH_FEEDBACK_MIN_MULTIPLIER + (1 - MATCH_FEEDBACK_MIN_MULTIPLIER) * rate;
+    if (mult < 1) multipliers.set(emId, mult);
+  }
+  return multipliers;
+}
+
 async function runDailyMatchingJob(limit = 50) {
   const { founders, ems, todayKey } = await loadMatchingPoolForToday();
   const foundersToProcess = founders.slice(0, limit);
@@ -894,13 +940,21 @@ async function runDailyMatchingJob(limit = 50) {
   );
 
   // 1. Score every founder's candidate EMs (excludes pairs already matched ever).
+  //    `score` is raw affinity (persisted); `weight` folds in the EM's recent
+  //    "useful" feedback and drives the assignment.
+  const emMultiplier = await loadEmScoreMultipliers();
   const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
-  const edges: Array<{ founderId: string; emId: string; score: number }> = [];
+  const edges: Array<{ founderId: string; emId: string; score: number; weight: number }> = [];
   for (const founder of foundersToProcess) {
     const shortlist = scoreCandidates(founder, ems, existingPairs);
     shortlistByFounder.set(founder.id, shortlist);
     for (const { em, score } of shortlist) {
-      edges.push({ founderId: founder.id, emId: em.id, score });
+      edges.push({
+        founderId: founder.id,
+        emId: em.id,
+        score,
+        weight: score * (emMultiplier.get(em.id) ?? 1),
+      });
     }
   }
 
@@ -913,7 +967,7 @@ async function runDailyMatchingJob(limit = 50) {
   );
   edges.sort(
     (a, b) =>
-      b.score - a.score ||
+      b.weight - a.weight ||
       a.founderId.localeCompare(b.founderId) ||
       a.emId.localeCompare(b.emId),
   );
@@ -921,7 +975,7 @@ async function runDailyMatchingJob(limit = 50) {
   const assignment = new Map<string, { emId: string; score: number; method: string }>();
   const emLoad = new Map<string, number>();
   const tryAssign = (
-    edge: { founderId: string; emId: string; score: number },
+    edge: { founderId: string; emId: string; score: number; weight: number },
     method: string,
     cap: number,
   ) => {
@@ -1743,6 +1797,11 @@ app.get("/matches/me", async (req, res) => {
     const aiRaw = (match.ai_raw_response ?? null) as { opener?: unknown } | null;
     const opener =
       aiRaw && typeof aiRaw === "object" && typeof aiRaw.opener === "string" ? aiRaw.opener : null;
+    const feedback =
+      match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
+        ? (match.feedback as Record<string, unknown>)
+        : {};
+    const myFeedback = feedback[isFounder ? "founder" : "em"] ?? null;
 
     res.json({
       match: {
@@ -1750,6 +1809,7 @@ app.get("/matches/me", async (req, res) => {
         match_date: match.match_date,
         reason_text: match.reason_text,
         opener,
+        my_feedback: myFeedback,
         createdAt: match.createdAt,
         role: isFounder ? "founder" : "experience_maker",
         counterpart: {
@@ -1766,6 +1826,69 @@ app.get("/matches/me", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load match";
     res.status(500).json({ error: message });
+  }
+});
+
+app.patch("/matches/:id/feedback", async (req, res) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const parsedId = z.string().uuid().safeParse(req.params.id);
+  if (!parsedId.success) {
+    res.status(400).json({ error: "Invalid match id" });
+    return;
+  }
+  const parsedBody = matchFeedbackSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "Invalid feedback payload" });
+    return;
+  }
+
+  const person = await resolvePersonFromAuth(auth);
+  if (!person) {
+    res.status(403).json({ error: "No person record linked to this email" });
+    return;
+  }
+
+  try {
+    const match = await prisma.match.findUnique({
+      where: { id: parsedId.data },
+      select: { id: true, founder_id: true, em_id: true, feedback: true },
+    });
+    if (!match) {
+      res.status(404).json({ error: "Match not found" });
+      return;
+    }
+
+    const role =
+      match.founder_id === person.id ? "founder" : match.em_id === person.id ? "em" : null;
+    if (!role) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const current =
+      match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
+        ? (match.feedback as Record<string, unknown>)
+        : {};
+    const mine = {
+      talked: parsedBody.data.talked,
+      useful: parsedBody.data.talked ? parsedBody.data.useful ?? null : null,
+      at: new Date().toISOString(),
+    };
+    const next = { ...current, [role]: mine };
+
+    await prisma.match.update({
+      where: { id: match.id },
+      data: { feedback: next as Prisma.InputJsonValue },
+    });
+
+    res.json({ ok: true, role, my_feedback: mine });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save feedback" });
   }
 });
 

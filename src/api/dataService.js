@@ -315,6 +315,15 @@ export async function getMyTodayMatch() {
   return payload?.match || null;
 }
 
+// payload: { talked: boolean, useful?: boolean|null }
+export async function submitMatchFeedback(matchId, payload) {
+  if (!matchId) return null;
+  return api(`/matches/${encodeURIComponent(matchId)}/feedback`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getHomeDailyContent(dateKey) {
   const query = dateKey ? `?date=${encodeURIComponent(dateKey)}` : "";
   return api(`/home-content${query}`);
