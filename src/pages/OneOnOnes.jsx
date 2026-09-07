@@ -14,6 +14,7 @@ import {
   formatDayLabel,
   formatShortDateTime,
   formatTime24,
+  getTodayKey,
 } from "../lib/dateTime";
 import LoadingState from "../components/LoadingState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
@@ -61,7 +62,7 @@ export default function OneOnOnes() {
 
   const groupedItems = useMemo(() => {
     const nowMs = Date.now();
-    const todayKey = formatDayKey(nowMs);
+    const todayKey = getTodayKey();
 
     const rankByDay = (item) => {
       const itemDay = formatDayKey(item.start_time);

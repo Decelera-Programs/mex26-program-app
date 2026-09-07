@@ -53,7 +53,7 @@ export default function InfoHub() {
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
               Info
             </h1>
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>Menorca 2026</p>
+            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>México 2026</p>
           </Motion.div>
         </div>
 
@@ -142,6 +142,7 @@ export default function InfoHub() {
         </div>
 
         {/* Location card */}
+        {/* TODO: replace venue details (name, address, map) with the Decelera México 2026 home base. */}
         <Motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

@@ -66,7 +66,9 @@ function isEventVisibleForContactType(event: { visible_to_contact_types?: unknow
   return allowedContactTypes.includes(normalizeContactType(contactType));
 }
 
-const AUDIENCE_TIMEZONE = "Europe/Madrid";
+// The program runs in Mexico. All "what day is it" / presence checks
+// (campaign audiences, on-site-today filters) resolve against this timezone.
+const AUDIENCE_TIMEZONE = "America/Mexico_City";
 const ADMIN_EMAIL_ALLOWLIST = (process.env.CAMPAIGN_ADMIN_EMAILS || "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -79,8 +81,7 @@ const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_TRANSCRIPTION_MODEL = (process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe").trim();
 const OPENAI_MATCHING_MODEL = (process.env.OPENAI_MATCHING_MODEL || "gpt-4o-mini").trim();
 
-// Founder<->Experience Maker daily matching. Own timezone constant (not AUDIENCE_TIMEZONE,
-// which is hardcoded to Madrid for a Mexico program - a preexisting issue out of scope here).
+// Founder<->Experience Maker daily matching runs in the program's timezone.
 const MATCHING_TIMEZONE = "America/Mexico_City";
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 const MATCH_WEIGHT_CHALLENGE = 3;
@@ -288,7 +289,7 @@ async function dispatchDuePushNotifications(now = new Date()) {
         : notification.match.founder_id
       : null;
     const payload = JSON.stringify({
-      title: campaignTitle || "Menorca Program",
+      title: campaignTitle || "Decelera México",
       body: notification.message,
       eventId: notification.event_id ?? null,
       personId: counterpartId,

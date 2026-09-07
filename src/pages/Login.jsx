@@ -300,7 +300,7 @@ export default function Login() {
               margin: 0,
             }}
           >
-            Menorca 2026
+            México 2026
           </p>
           <h1
             style={{

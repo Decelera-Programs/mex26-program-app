@@ -4,14 +4,18 @@ import MatchCard from "../components/MatchCard";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
+
+// TODO: set the real Decelera México 2026 start date.
+const PROGRAM_START_DATE = "2026-05-23";
 
 const FALLBACK_HERO_CONTENT = {
   phase_label: "",
-  badge_text: `TODAY · ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "Europe/Madrid" }).format(new Date())}`,
+  badge_text: `TODAY · ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: PROGRAM_TIMEZONE }).format(new Date())}`,
   title: "Decelera.",
   subtitle: (() => {
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
-    const diff = Math.ceil((new Date("2026-05-23") - new Date(todayStr)) / 86400000);
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(new Date());
+    const diff = Math.ceil((new Date(PROGRAM_START_DATE) - new Date(todayStr)) / 86400000);
     return diff > 0 ? `${diff} days until the program` : "Decelera.";
   })(),
   body_text: "Slow down before you scale. We start the week soft - long walks, no laptops before lunch, dinners that run late.",
@@ -23,16 +27,13 @@ const FALLBACK_PODCAST = {
   title: "Welcome to Decelera",
 };
 
-const APP_TIMEZONE = "Europe/Madrid";
-const getTodayKey = () => new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIMEZONE }).format(new Date());
-
-function dateKeyInMadrid(raw) {
+function dateKeyInProgramTz(raw) {
   if (!raw) return null;
   const str = String(raw).trim().replace(" ", "T");
   const withTz = /(?:Z|[+-]\d{2}:\d{2})$/i.test(str) ? str : `${str}Z`;
   const d = new Date(withTz);
   if (Number.isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIMEZONE }).format(d);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(d);
 }
 
 const CHECKIN_QUESTIONS = [
@@ -48,10 +49,8 @@ export default function Home() {
     const raw = String(rawDate).trim();
     if (!raw) return null;
     const normalized = raw.includes(" ") && !raw.includes("T") ? raw.replace(" ", "T") : raw;
-    const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized);
-    // If DB returns naive timestamp, treat it as UTC base (+0).
-    const candidate = hasTimezone ? normalized : `${normalized}Z`;
-    const parsed = new Date(candidate);
+    // Naive timestamps are floating wall-clock time (the published Mexico schedule).
+    const parsed = new Date(normalized);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
@@ -59,7 +58,6 @@ export default function Home() {
     const date = parseEventDate(rawDate);
     if (!date) return null;
     return new Intl.DateTimeFormat("en-CA", {
-      timeZone: APP_TIMEZONE,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -877,8 +875,8 @@ function PeopleCardPreview({ people, onClick }) {
   const presentToday = Array.isArray(people)
     ? people.filter((p) => {
         if (String(p?.contact_type || "") === "team") return false;
-        const arrival = dateKeyInMadrid(p?.arrival_date);
-        const departure = dateKeyInMadrid(p?.departure_date);
+        const arrival = dateKeyInProgramTz(p?.arrival_date);
+        const departure = dateKeyInProgramTz(p?.departure_date);
         if (!arrival || !departure) return false;
         return arrival <= todayKey && departure >= todayKey;
       })
@@ -928,7 +926,7 @@ function PeopleCardPreview({ people, onClick }) {
         </div>
 
         <div className="min-w-0 flex-1" style={{ paddingLeft: 2 }}>
-          <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>On the island</p>
+          <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>On site</p>
           <div
             style={{
               display: "flex",
@@ -952,26 +950,9 @@ function PeopleCardPreview({ people, onClick }) {
   );
 }
 
-const SPONSORS = [
-  { name: "Zinco AI",             logo: "/sponsors/sponsor-1.svg",  url: "https://zinco.ai/" },
-  { name: "Sancus Capital",       logo: "/sponsors/sponsor-2.png",  url: "https://sancuscapital.es/en/" },
-  { name: "Menorca",              logo: "/sponsors/sponsor-3.jpg",  url: "https://www.menorca.es/" },
-  { name: "Mahou",                logo: "/sponsors/sponsor-4.jpg",  url: "https://www.mahou-sanmiguel.com/" },
-  { name: "Electrolit",           logo: "/sponsors/sponsor-6.png",  url: "https://www.electrolit.es/" },
-  { name: "La Menorquina",        logo: "/sponsors/sponsor-7.jpg",  url: "https://www.lamenorquina.com/" },
-  { name: "Son Parc Hotels",      logo: "/sponsors/sponsor-8.png",  url: "https://sonparchotelsmenorca.com/" },
-  { name: "Fibralink",            logo: "/sponsors/sponsor-9.png",  url: "https://www.fibralink.es/" },
-  { name: "Menorcabus",           logo: "/sponsors/sponsor-10.jpg", url: "https://menorcabus.com/es/" },
-  { name: "Owners Cars",          logo: "/sponsors/sponsor-11.jpg", url: "https://ownerscars.com/en" },
-  { name: "El Paladar",           logo: "/sponsors/sponsor-12.jpg", url: "https://www.elpaladar.es/es/" },
-  { name: "Go Menorca",           logo: "/sponsors/sponsor-13.png", url: "https://gomenorca.com/es" },
-  { name: "Isafra",               logo: "/sponsors/sponsor-14.png", url: null },
-  { name: "Cacahuete Beach",      logo: "/sponsors/sponsor-15.png", url: "https://a-mares.com/es/" },
-  { name: "Cámara Menorca",       logo: "/sponsors/sponsor-16.jpg", url: "https://www.camaramenorca.com/" },
-  { name: "Iberia",               logo: "/sponsors/sponsor-17.png", url: "https://www.iberia.com/" },
-  { name: "Salgar Catering",      logo: "/sponsors/sponsor-18.png", url: "https://www.salgarcatering.com/" },
-  { name: "Gin Xoriguer",         logo: "/sponsors/sponsor-19.png", url: "https://xoriguer.es/en/" },
-];
+// TODO: populate with the Decelera México 2026 sponsors (name, logo in /public/sponsors, url).
+// The section is hidden while this list is empty.
+const SPONSORS = [];
 
 function SponsorLogo({ sponsor }) {
   const [failed, setFailed] = useState(false);
@@ -1013,6 +994,7 @@ function SponsorLogo({ sponsor }) {
 }
 
 function SponsorsSection() {
+  if (!SPONSORS.length) return null;
   const doubled = [...SPONSORS, ...SPONSORS];
   return (
     <div style={{ marginTop: 4 }}>

@@ -1,7 +1,7 @@
 /* Simple service worker for offline support.
    This is intentionally minimal and backend-free. */
 
-const CACHE_NAME = "menorca-pwa-v5";
+const CACHE_NAME = "decelera-mx-pwa-v1";
 
 // Core shell files. Vite will fingerprint JS/CSS, so we cache navigation + static assets.
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.ico"];
@@ -65,7 +65,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const payload = event.data?.json?.() || {};
-  const title = payload.title || "Menorca Program";
+  const title = payload.title || "Decelera México";
   const body = payload.body || "You have a new notification";
   const eventId = payload.eventId || null;
   const personId = payload.personId || null;

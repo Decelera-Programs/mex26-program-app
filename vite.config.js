@@ -11,6 +11,8 @@ export default defineConfig({
   },
   preview: {
     host: true,
-    allowedHosts: ["decelera-menorca-2026-production.up.railway.app"],
+    // Railway serves this behind its own edge router; the service hostname
+    // isn't fixed, so accept whatever host Railway forwards.
+    allowedHosts: true,
   },
 })

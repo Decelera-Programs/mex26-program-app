@@ -66,7 +66,7 @@ export default function Startups() {
               Startups
             </h1>
             <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>
-              {startups.length} companies at Menorca 2026
+              {startups.length} companies at México 2026
             </p>
           </Motion.div>
         </div>

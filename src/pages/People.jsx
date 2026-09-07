@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import { getCurrentUser, listPeople } from "../api/dataService";
+import { PROGRAM_TIMEZONE } from "../lib/dateTime";
 import PersonCard from "../components/PersonCard";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from '../components/LoadingState'
@@ -45,7 +46,7 @@ export default function People() {
   }, []);
 
   const filtered = useMemo(() => {
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(new Date());
     return people.filter((p) => {
       const matchTab = activeTab === "all" || p.contact_type === activeTab;
       const q = search.trim().toLowerCase();
@@ -90,7 +91,7 @@ export default function People() {
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
               People
             </h1>
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>Everyone at Menorca 2026</p>
+            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>Everyone at México 2026</p>
           </Motion.div>
         </div>
 
@@ -132,7 +133,7 @@ export default function People() {
               </svg>
             )}
           </span>
-          <span style={{ fontSize: 11.5, fontWeight: 500, color: "#2D3852", marginLeft: 1.5 }}>Today in the island</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: "#2D3852", marginLeft: 1.5 }}>Here today</span>
         </label>
 
         <div className="people-filter-tabs flex overflow-x-auto pb-3 pl-4">

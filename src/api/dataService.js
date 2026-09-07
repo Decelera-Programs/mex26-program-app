@@ -105,6 +105,28 @@ async function api(path, init) {
   return response.json();
 }
 
+// Event / 1:1 times are stored in the DB as naive wall-clock values that
+// represent the program's local (Mexico) schedule, but Prisma serializes them
+// with a trailing "Z". Strip the zone so the whole app treats them as floating
+// wall-clock time: whatever was typed is what every attendee sees, regardless
+// of their device timezone. See src/lib/dateTime.js.
+function toFloatingWallClock(raw) {
+  if (!raw) return raw;
+  const s = String(raw).trim();
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
+  const parts = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
+  // Already naive: keep the wall clock verbatim (don't reinterpret via local tz).
+  if (parts && !hasZone) return `${parts[1]}T${parts[2]}:${parts[3] || "00"}`;
+  // Has a zone (Prisma serializes the stored naive value as UTC): read the UTC parts.
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return raw;
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`
+  );
+}
+
 function parseExpertiseTags(raw) {
   if (Array.isArray(raw)) return raw;
   if (typeof raw !== "string" || !raw.trim()) return [];
@@ -188,7 +210,11 @@ function normalizePerson(person) {
 
 function normalizeEvent(event) {
   if (!event) return null;
-  return { ...event };
+  return {
+    ...event,
+    start_time: toFloatingWallClock(event.start_time),
+    end_time: toFloatingWallClock(event.end_time),
+  };
 }
 
 function normalizeNotification(notification) {
@@ -205,6 +231,8 @@ function normalizeOneOnOne(record) {
   if (!record) return null;
   return {
     ...record,
+    start_time: toFloatingWallClock(record.start_time),
+    end_time: toFloatingWallClock(record.end_time),
     startup_name: record.startup?.name || "",
     startup_logo_url: normalizePhotoUrl(record.startup?.logo_url),
     em_name: record.em?.full_name || "",

@@ -1,6 +1,8 @@
 import { motion as Motion } from "framer-motion";
 import { MapPin, Plane, Utensils, Sun, Phone, AlertCircle } from "lucide-react";
 
+// TODO: all logistics content below is still the Menorca 2026 venue (hotel,
+// address, airport transfer instructions). Replace with the Decelera México 2026 details.
 const HOTEL_MAP_URL =
   "https://www.google.com/maps/search/?api=1&query=Beach+Club+Menorca+Av.+de+la+Playa+Son+Parc+Menorca";
 
@@ -169,7 +171,7 @@ export default function Logistics() {
               Logistics
             </h1>
             <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>
-              Hotel, transfers, meals &amp; essentials · Menorca 2026
+              Hotel, transfers, meals &amp; essentials · México 2026
             </p>
           </Motion.div>
         </div>

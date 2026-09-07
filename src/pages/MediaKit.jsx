@@ -120,7 +120,7 @@ export default function MediaKit() {
             </h1>
             <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>Photos &amp; Stories</p>
             <p style={{ fontSize: 13, color: "#2D3852", opacity: 0.75, marginTop: 10, lineHeight: 1.55 }}>
-              We'd love to see you sharing your Menorca moments on Social Media! There is a picture library updated every day, feel free to pick the ones you like the most. One little thing, please don't forget to mention <b>@Decelera</b> and use the hashtag <b>#DeceleraMenorca2026</b> in all your posts!
+              We'd love to see you sharing your Decelera moments on Social Media! There is a picture library updated every day, feel free to pick the ones you like the most. One little thing, please don't forget to mention <b>@Decelera</b> and use the hashtag <b>#DeceleraMexico2026</b> in all your posts!
             </p>
           </Motion.div>
         </div>
