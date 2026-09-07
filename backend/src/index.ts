@@ -86,6 +86,8 @@ const MATCHING_TIMEZONE = "America/Mexico_City";
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 const MATCH_WEIGHT_CHALLENGE = 3;
 const MATCH_WEIGHT_DIRECT_TAG = 1;
+// Hard ceiling on how many founders one EM can be matched with in a single day.
+const MATCH_EM_DAILY_CAPACITY_CAP = 4;
 
 // Maps a founder's worst-rated challenge sections to expertise_tags likely to help with them.
 // Hand-tuned against the real expertise_tags vocabulary in production; edit freely if matches feel off.
@@ -105,11 +107,11 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
   marketing_communication: ["Digital marketing", "Inbound marketing", "Communication", "Brand"],
 };
 
-const matchChoiceSchema = z
+// The (founder, EM) pair is decided by the global assignment; OpenAI only writes
+// the conversation prompt: a concrete thing to talk about + a line the founder
+// can literally say to start it informally.
+const matchTopicSchema = z
   .object({
-    selected_em_id: z.string().min(1),
-    // A concrete thing for the founder to talk to this EM about, and a first line
-    // they can literally say to start the conversation informally.
     topic: z.string().min(1).max(400),
     opener: z.string().min(1).max(400),
   })
@@ -768,10 +770,10 @@ function scoreCandidates(
     .slice(0, MATCH_CANDIDATE_POOL_SIZE);
 }
 
-async function pickMatchWithOpenAI(
+async function writeMatchTopic(
   founder: MatchCandidatePerson,
-  shortlist: Array<{ em: MatchCandidatePerson; score: number }>,
-): Promise<{ selected_em_id: string; topic: string; opener: string }> {
+  em: MatchCandidatePerson,
+): Promise<{ topic: string; opener: string }> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured in backend env");
   }
@@ -780,7 +782,6 @@ async function pickMatchWithOpenAI(
     | { deep_dive?: { challenge_name?: string; expertise_wanted?: string } }
     | undefined;
   const founderContext = {
-    id: founder.id,
     full_name: founder.full_name,
     startup_name: founder.startup?.name || null,
     expertise_tags: founder.expertise_tags,
@@ -788,14 +789,12 @@ async function pickMatchWithOpenAI(
     challenge_name: challenges?.deep_dive?.challenge_name || null,
     expertise_wanted: challenges?.deep_dive?.expertise_wanted || null,
   };
-  const candidates = shortlist.map(({ em, score }) => ({
-    id: em.id,
+  const emContext = {
     full_name: em.full_name,
     tagline: em.tagline,
     company_name: em.company_name,
     expertise_tags: em.expertise_tags,
-    score,
-  }));
+  };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -818,18 +817,17 @@ async function pickMatchWithOpenAI(
             role: "system",
             content:
               "Eres el asistente de conexiones informales del programa Decelera Mexico 2026. " +
-              "Cada dia se sugiere a un founder que hable de forma informal (en una pausa o comida, SIN agendar " +
-              "reunion) con un experience maker para una conversacion corta y util. " +
-              "Se te da un founder con su reto vivo y una shortlist de experience makers candidatos. Debes: " +
-              "1) Elegir EXACTAMENTE UNO de los ids de la shortlist (nunca inventes un id que no este en la lista). " +
-              "2) \"topic\": en espanol, maximo 180 caracteres. UN tema concreto y accionable del que hablar, " +
+              "Se te da un founder con su reto vivo y un experience maker con el que YA esta emparejado para hoy. " +
+              "El founder deberia hablar con el de forma informal (en una pausa o comida, SIN agendar reunion) " +
+              "para una conversacion corta y util. Genera: " +
+              "1) \"topic\": en espanol, maximo 180 caracteres. UN tema concreto y accionable del que hablar, " +
               "anclado en el reto real del founder y en algo especifico del expertise o la experiencia de ese EM. " +
               "Nada generico. " +
-              "3) \"opener\": en espanol, maximo 160 caracteres. Una frase en primera persona que el founder pueda " +
+              "2) \"opener\": en espanol, maximo 160 caracteres. Una frase en primera persona que el founder pueda " +
               "decirle literalmente para arrancar la conversacion de forma natural e informal. " +
-              'Responde SOLO un JSON con este formato exacto: {"selected_em_id": string, "topic": string, "opener": string}.',
+              'Responde SOLO un JSON con este formato exacto: {"topic": string, "opener": string}.',
           },
-          { role: "user", content: JSON.stringify({ founder: founderContext, candidates }) },
+          { role: "user", content: JSON.stringify({ founder: founderContext, experience_maker: emContext }) },
         ],
       }),
     });
@@ -848,11 +846,7 @@ async function pickMatchWithOpenAI(
   if (!raw) {
     throw new Error("Empty OpenAI matching response");
   }
-  const parsed = matchChoiceSchema.parse(JSON.parse(raw));
-  if (!shortlist.some((c) => c.em.id === parsed.selected_em_id)) {
-    throw new Error("OpenAI selected an id outside the shortlist");
-  }
-  return parsed;
+  return matchTopicSchema.parse(JSON.parse(raw));
 }
 
 // Used when OpenAI is unavailable: a deterministic topic + opener from tag overlap.
@@ -883,7 +877,14 @@ async function runDailyMatchingJob(limit = 50) {
   const foundersToProcess = founders.slice(0, limit);
 
   if (foundersToProcess.length === 0 || ems.length === 0) {
-    return { processed: 0, matched: 0, skipped_no_candidates: 0, failed: 0 };
+    return {
+      processed: 0,
+      matched: 0,
+      matched_via_fill: 0,
+      skipped_no_candidates: 0,
+      failed: 0,
+      em_capacity: 0,
+    };
   }
 
   const existingPairs = new Set(
@@ -892,48 +893,93 @@ async function runDailyMatchingJob(limit = 50) {
     ),
   );
 
+  // 1. Score every founder's candidate EMs (excludes pairs already matched ever).
+  const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
+  const edges: Array<{ founderId: string; emId: string; score: number }> = [];
+  for (const founder of foundersToProcess) {
+    const shortlist = scoreCandidates(founder, ems, existingPairs);
+    shortlistByFounder.set(founder.id, shortlist);
+    for (const { em, score } of shortlist) {
+      edges.push({ founderId: founder.id, emId: em.id, score });
+    }
+  }
+
+  // 2. Global greedy assignment by score: each founder gets <=1 EM, each EM gets
+  //    <= capacity founders/day. A second pass at capacity+1 rescues founders who
+  //    still have no slot, so nobody is left without a recommendation.
+  const capacity = Math.min(
+    MATCH_EM_DAILY_CAPACITY_CAP,
+    Math.max(1, Math.ceil(foundersToProcess.length / ems.length)),
+  );
+  edges.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.founderId.localeCompare(b.founderId) ||
+      a.emId.localeCompare(b.emId),
+  );
+
+  const assignment = new Map<string, { emId: string; score: number; method: string }>();
+  const emLoad = new Map<string, number>();
+  const tryAssign = (
+    edge: { founderId: string; emId: string; score: number },
+    method: string,
+    cap: number,
+  ) => {
+    if (assignment.has(edge.founderId)) return;
+    if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
+    assignment.set(edge.founderId, { emId: edge.emId, score: edge.score, method });
+    emLoad.set(edge.emId, (emLoad.get(edge.emId) ?? 0) + 1);
+  };
+  for (const edge of edges) tryAssign(edge, "global_greedy", capacity);
+  for (const edge of edges) tryAssign(edge, "global_fill", capacity + 1);
+
+  // 3. Persist one Match + two notifications per assigned founder.
+  const emById = new Map(ems.map((em) => [em.id, em]));
   let matched = 0;
+  let matchedViaFill = 0;
   let skippedNoCandidates = 0;
   let failed = 0;
   const matchDate = new Date(`${todayKey}T00:00:00.000Z`);
 
   for (const founder of foundersToProcess) {
+    const chosen = assignment.get(founder.id);
+    if (!chosen) {
+      // No candidates, or every candidate EM was already at capacity+1.
+      skippedNoCandidates += 1;
+      continue;
+    }
+    const em = emById.get(chosen.emId);
+    if (!em) {
+      failed += 1;
+      continue;
+    }
+
     try {
-      const shortlist = scoreCandidates(founder, ems, existingPairs);
-      if (shortlist.length === 0) {
-        skippedNoCandidates += 1;
-        continue;
-      }
-
-      let selectedEmId = shortlist[0].em.id;
-      let { topic, opener } = fallbackMatchTopic(founder, shortlist[0].em);
-      let selectionMethod = "fallback_top_score";
-
+      let { topic, opener } = fallbackMatchTopic(founder, em);
+      let topicSource = "fallback";
       try {
-        const aiChoice = await pickMatchWithOpenAI(founder, shortlist);
-        selectedEmId = aiChoice.selected_em_id;
-        topic = aiChoice.topic;
-        opener = aiChoice.opener;
-        selectionMethod = "ai";
+        const written = await writeMatchTopic(founder, em);
+        topic = written.topic;
+        opener = written.opener;
+        topicSource = "ai";
       } catch {
-        // Keep the deterministic top-score fallback already assigned above.
+        // Keep the deterministic fallback text.
       }
 
-      const selected = shortlist.find((c) => c.em.id === selectedEmId) || shortlist[0];
-
+      const shortlist = shortlistByFounder.get(founder.id) ?? [];
       const createdMatch = await prisma.match.create({
         data: {
           match_date: matchDate,
           founder_id: founder.id,
-          em_id: selected.em.id,
+          em_id: em.id,
           startup_id: founder.startup_id,
-          score: selected.score,
+          score: chosen.score,
           candidate_pool: shortlist.map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
-          selection_method: selectionMethod,
+          selection_method: chosen.method,
           // reason_text holds the suggested conversation topic (headline shown in the UI).
           reason_text: topic,
           // opener lives here (no dedicated column yet); /matches/me reads it back.
-          ai_raw_response: { topic, opener, source: selectionMethod } as Prisma.InputJsonValue,
+          ai_raw_response: { topic, opener, source: topicSource } as Prisma.InputJsonValue,
         },
       });
 
@@ -948,7 +994,7 @@ async function runDailyMatchingJob(limit = 50) {
           },
           {
             id: crypto.randomUUID(),
-            user_id: selected.em.id,
+            user_id: em.id,
             message: topic,
             sent_at: new Date(),
             match_id: createdMatch.id,
@@ -956,8 +1002,8 @@ async function runDailyMatchingJob(limit = 50) {
         ],
       });
 
-      existingPairs.add(`${founder.id}:${selected.em.id}`);
       matched += 1;
+      if (chosen.method === "global_fill") matchedViaFill += 1;
     } catch {
       failed += 1;
     }
@@ -966,8 +1012,10 @@ async function runDailyMatchingJob(limit = 50) {
   return {
     processed: foundersToProcess.length,
     matched,
+    matched_via_fill: matchedViaFill,
     skipped_no_candidates: skippedNoCandidates,
     failed,
+    em_capacity: capacity,
   };
 }
 
