@@ -374,7 +374,8 @@ model Match {
   startup Startup? @relation(fields: [startup_id], references: [id], onDelete: SetNull)
   notifications Notification[]
 
-  @@unique([founder_id, em_id])
+  // Note: no unique on (founder_id, em_id) — pairs may repeat over the program;
+  // repetition is dampened softly by loadPairMultipliers() in the matching job.
   @@unique([founder_id, match_date])
   @@index([em_id])
   @@index([match_date])

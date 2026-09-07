@@ -132,6 +132,14 @@ const MATCH_FEEDBACK_LOOKBACK_DAYS = 14;
 const MATCH_FEEDBACK_MIN_SAMPLES = 2;
 const MATCH_FEEDBACK_MIN_MULTIPLIER = 0.4;
 
+// Repeated (founder, EM) pairs: instead of a hard ban, dampen the score and let
+// it recover over a cooldown. A pair matched within HARD_EXCLUDE_DAYS is skipped
+// outright; a pair the founder last rated useful:false cools down much slower;
+// a pair last rated useful:true carries no penalty.
+const MATCH_PAIR_HARD_EXCLUDE_DAYS = 1;
+const MATCH_PAIR_COOLDOWN_DAYS = 3;
+const MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS = 10;
+
 const campaignFiltersSchema = z
   .object({
     contact_types: z.array(z.string().min(1)).optional(),
@@ -766,13 +774,14 @@ async function loadMatchingPoolForToday() {
 function scoreCandidates(
   founder: MatchCandidatePerson,
   ems: MatchCandidatePerson[],
-  excludedPairs: Set<string>,
+  hardExcludedPairs: Set<string>,
 ) {
   const founderTags = hasMeaningfulExpertiseTags(founder.expertise_tags) ? founder.expertise_tags : [];
   const challengeTags = tagsFromChallengeSections(founder.startup?.challenges);
 
+  // Return every viable EM (score > 0); the daily job trims/penalises from here.
   return ems
-    .filter((em) => !excludedPairs.has(`${founder.id}:${em.id}`))
+    .filter((em) => !hardExcludedPairs.has(`${founder.id}:${em.id}`))
     .map((em) => {
       const emTags = hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags : [];
       const challengeOverlap = emTags.filter((t) => challengeTags.includes(t)).length;
@@ -781,8 +790,7 @@ function scoreCandidates(
       return { em, score };
     })
     .filter((c) => c.score > 0)
-    .sort((a, b) => b.score - a.score || a.em.id.localeCompare(b.em.id))
-    .slice(0, MATCH_CANDIDATE_POOL_SIZE);
+    .sort((a, b) => b.score - a.score || a.em.id.localeCompare(b.em.id));
 }
 
 async function writeMatchTopic(
@@ -918,6 +926,48 @@ async function loadEmScoreMultipliers(): Promise<Map<string, number>> {
   return multipliers;
 }
 
+// Repeated (founder, EM) pairs. Returns, per "founderId:emId" key:
+//  - hardExcluded: matched within HARD_EXCLUDE_DAYS -> not a candidate today
+//  - multiplier (<1): still cooling down (feedback useful:false cools slower;
+//    useful:true carries no penalty and is omitted)
+//  - priorCount: how many times this pair has been matched before (observability)
+async function loadPairMultipliers(founderIds: string[], todayKey: string) {
+  const multiplier = new Map<string, number>();
+  const hardExcluded = new Set<string>();
+  const priorCount = new Map<string, number>();
+  if (founderIds.length === 0) return { multiplier, hardExcluded, priorCount };
+
+  const rows = await prisma.match.findMany({
+    where: { founder_id: { in: founderIds } },
+    select: { founder_id: true, em_id: true, match_date: true, feedback: true },
+    orderBy: { match_date: "asc" },
+  });
+
+  const todayMs = new Date(`${todayKey}T00:00:00.000Z`).getTime();
+  const latest = new Map<string, { daysAgo: number; useful: unknown }>();
+  for (const row of rows) {
+    const key = `${row.founder_id}:${row.em_id}`;
+    priorCount.set(key, (priorCount.get(key) ?? 0) + 1);
+    const daysAgo = Math.floor((todayMs - new Date(row.match_date).getTime()) / 86400000);
+    const fb = row.feedback as { founder?: { useful?: unknown } } | null;
+    latest.set(key, { daysAgo, useful: fb?.founder?.useful });
+  }
+
+  for (const [key, info] of latest) {
+    if (info.daysAgo <= MATCH_PAIR_HARD_EXCLUDE_DAYS) {
+      hardExcluded.add(key);
+      continue;
+    }
+    if (info.useful === true) continue; // "talk again" — compete on raw affinity
+    const cooldown =
+      info.useful === false ? MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS : MATCH_PAIR_COOLDOWN_DAYS;
+    const mult = Math.min(1, info.daysAgo / cooldown);
+    if (mult < 1) multiplier.set(key, mult);
+  }
+
+  return { multiplier, hardExcluded, priorCount };
+}
+
 async function runDailyMatchingJob(limit = 50) {
   const { founders, ems, todayKey } = await loadMatchingPoolForToday();
   const foundersToProcess = founders.slice(0, limit);
@@ -933,27 +983,30 @@ async function runDailyMatchingJob(limit = 50) {
     };
   }
 
-  const existingPairs = new Set(
-    (await prisma.match.findMany({ select: { founder_id: true, em_id: true } })).map(
-      (m) => `${m.founder_id}:${m.em_id}`,
-    ),
-  );
+  const founderIds = foundersToProcess.map((f) => f.id);
+  const [emMultiplier, pairInfo] = await Promise.all([
+    loadEmScoreMultipliers(),
+    loadPairMultipliers(founderIds, todayKey),
+  ]);
+  const { multiplier: pairMultiplier, hardExcluded: hardExcludedPairs, priorCount: pairPriorCount } =
+    pairInfo;
 
-  // 1. Score every founder's candidate EMs (excludes pairs already matched ever).
-  //    `score` is raw affinity (persisted); `weight` folds in the EM's recent
-  //    "useful" feedback and drives the assignment.
-  const emMultiplier = await loadEmScoreMultipliers();
+  // 1. Score every founder's candidate EMs. `score` is raw affinity (persisted);
+  //    `weight` folds in the EM's recent "useful" feedback and the repeated-pair
+  //    cooldown, and drives the assignment. Pairs matched in the last day are
+  //    dropped outright (hardExcludedPairs).
   const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
   const edges: Array<{ founderId: string; emId: string; score: number; weight: number }> = [];
   for (const founder of foundersToProcess) {
-    const shortlist = scoreCandidates(founder, ems, existingPairs);
+    const shortlist = scoreCandidates(founder, ems, hardExcludedPairs);
     shortlistByFounder.set(founder.id, shortlist);
     for (const { em, score } of shortlist) {
+      const key = `${founder.id}:${em.id}`;
       edges.push({
         founderId: founder.id,
         emId: em.id,
         score,
-        weight: score * (emMultiplier.get(em.id) ?? 1),
+        weight: score * (emMultiplier.get(em.id) ?? 1) * (pairMultiplier.get(key) ?? 1),
       });
     }
   }
@@ -1021,6 +1074,7 @@ async function runDailyMatchingJob(limit = 50) {
       }
 
       const shortlist = shortlistByFounder.get(founder.id) ?? [];
+      const priorMatches = pairPriorCount.get(`${founder.id}:${em.id}`) ?? 0;
       const createdMatch = await prisma.match.create({
         data: {
           match_date: matchDate,
@@ -1028,12 +1082,19 @@ async function runDailyMatchingJob(limit = 50) {
           em_id: em.id,
           startup_id: founder.startup_id,
           score: chosen.score,
-          candidate_pool: shortlist.map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
+          candidate_pool: shortlist
+            .slice(0, MATCH_CANDIDATE_POOL_SIZE)
+            .map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
           selection_method: chosen.method,
           // reason_text holds the suggested conversation topic (headline shown in the UI).
           reason_text: topic,
           // opener lives here (no dedicated column yet); /matches/me reads it back.
-          ai_raw_response: { topic, opener, source: topicSource } as Prisma.InputJsonValue,
+          ai_raw_response: {
+            topic,
+            opener,
+            source: topicSource,
+            prior_matches: priorMatches,
+          } as Prisma.InputJsonValue,
         },
       });
 
