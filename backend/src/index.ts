@@ -88,6 +88,10 @@ const MATCH_WEIGHT_CHALLENGE = 3;
 const MATCH_WEIGHT_DIRECT_TAG = 1;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
 const MATCH_EM_DAILY_CAPACITY_CAP = 4;
+// A challenge section counts as "a real problem" at this average severity (ratings are 1-4).
+// Observed severities in the Mexico 2026 cohort cluster around 2.0-3.4, so 3.0 was too strict
+// and left most founders scoring against a single section.
+const MATCH_CHALLENGE_SEVERITY_THRESHOLD = 2.5;
 
 // Maps a founder's worst-rated challenge sections to expertise_tags likely to help with them.
 // Hand-tuned against the real expertise_tags vocabulary in production; edit freely if matches feel off.
@@ -104,7 +108,13 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
     "Product", "AI", "Big data", "Tech Background", "Platform thinking",
     "Mobile applications", "Enterprise applications", "Deeptech",
   ],
-  marketing_communication: ["Digital marketing", "Inbound marketing", "Communication", "Brand"],
+  // Broadened beyond pure marketing/comms tags: in this cohort ~60% of founders are weakest
+  // here but only a handful of EMs carry those tags, so adjacent growth/GTM/consumer expertise
+  // (channels, positioning, category) is included to relieve the bottleneck.
+  marketing_communication: [
+    "Digital marketing", "Inbound marketing", "Communication", "Brand",
+    "GTM", "Sales / Growth", "B2C",
+  ],
 };
 
 // The (founder, EM) pair is decided by the global assignment; OpenAI only writes
@@ -698,8 +708,10 @@ function topChallengeSections(challenges: unknown): Array<{ section: string; avg
     .filter((v): v is { section: string; avgSeverity: number } => v != null)
     .sort((a, b) => b.avgSeverity - a.avgSeverity);
 
-  const priority = scored.filter((s) => s.avgSeverity >= 3).slice(0, 2);
-  return priority.length > 0 ? priority : scored.slice(0, 1);
+  const priority = scored
+    .filter((s) => s.avgSeverity >= MATCH_CHALLENGE_SEVERITY_THRESHOLD)
+    .slice(0, 2);
+  return priority.length > 0 ? priority : scored.slice(0, 2);
 }
 
 function tagsFromChallengeSections(challenges: unknown): string[] {
