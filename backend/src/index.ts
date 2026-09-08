@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createHash } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { z } from "zod";
@@ -80,12 +81,21 @@ const ONE_ON_ONE_AUDIO_SIGNED_URL_TTL_SEC = 60 * 60;
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_TRANSCRIPTION_MODEL = (process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe").trim();
 const OPENAI_MATCHING_MODEL = (process.env.OPENAI_MATCHING_MODEL || "gpt-4o-mini").trim();
+const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small").trim();
 
 // Founder<->Experience Maker daily matching runs in the program's timezone.
 const MATCHING_TIMEZONE = "America/Mexico_City";
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 const MATCH_WEIGHT_CHALLENGE = 3;
 const MATCH_WEIGHT_DIRECT_TAG = 1;
+// Semantic term: cosine similarity between the founder's stated need
+// (challenge_name + expertise_wanted + top sections) and the EM's profile
+// (tagline + expertise_tags + bio), rescaled from [SIM_MIN, SIM_MAX] to [0, 1]
+// and worth up to MATCH_WEIGHT_TEXT "tag points". The tag-overlap score stays as
+// a floor; this only adds. If OPENAI_API_KEY is unset the term is simply 0.
+const MATCH_WEIGHT_TEXT = 8;
+const MATCH_TEXT_SIM_MIN = 0.15;
+const MATCH_TEXT_SIM_MAX = 0.55;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
 const MATCH_EM_DAILY_CAPACITY_CAP = 4;
 // A challenge section counts as "a real problem" at this average severity.
@@ -727,15 +737,17 @@ function tagsFromChallengeSections(challenges: unknown): string[] {
 type MatchCandidatePerson = {
   id: string;
   full_name: string;
+  bio: string | null;
   tagline: string | null;
   photo_url: string | null;
   contact_type: string | null;
   company_name: string | null;
   expertise_tags: unknown;
+  embedding: unknown;
   startup_id: string | null;
   arrival_date: Date | null;
   departure_date: Date | null;
-  startup: { id: string; name: string; challenges: unknown } | null;
+  startup: { id: string; name: string; challenges: unknown; challenge_embedding: unknown } | null;
 };
 
 async function loadMatchingPoolForToday() {
@@ -745,15 +757,17 @@ async function loadMatchingPoolForToday() {
     select: {
       id: true,
       full_name: true,
+      bio: true,
       tagline: true,
       photo_url: true,
       contact_type: true,
       company_name: true,
       expertise_tags: true,
+      embedding: true,
       startup_id: true,
       arrival_date: true,
       departure_date: true,
-      startup: { select: { id: true, name: true, challenges: true } },
+      startup: { select: { id: true, name: true, challenges: true, challenge_embedding: true } },
     },
   });
 
@@ -804,13 +818,176 @@ async function loadMatchingPoolForToday() {
   return { founders, ems, todayKey, excludedFounders };
 }
 
+// ---- Semantic scoring (C2): cached embeddings + cosine similarity ----------
+
+function hashText(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || a.length !== b.length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Rescale a raw cosine into "tag points": <= SIM_MIN -> 0, >= SIM_MAX -> full weight.
+function textSimToPoints(cosine: number): number {
+  const span = MATCH_TEXT_SIM_MAX - MATCH_TEXT_SIM_MIN;
+  const norm = span > 0 ? (cosine - MATCH_TEXT_SIM_MIN) / span : 0;
+  return MATCH_WEIGHT_TEXT * Math.max(0, Math.min(1, norm));
+}
+
+function deepDiveText(challenges: unknown): { challengeName: string; expertiseWanted: string } {
+  const dd = (
+    challenges as { deep_dive?: { challenge_name?: unknown; expertise_wanted?: unknown } } | null
+  )?.deep_dive;
+  return {
+    challengeName: typeof dd?.challenge_name === "string" ? dd.challenge_name : "",
+    expertiseWanted: typeof dd?.expertise_wanted === "string" ? dd.expertise_wanted : "",
+  };
+}
+
+// The founder "need" text is startup-scoped (challenge + wanted expertise), so it's
+// cached on Startup.challenge_embedding and shared by co-founders.
+function founderNeedText(startup: MatchCandidatePerson["startup"]): string {
+  if (!startup) return "";
+  const { challengeName, expertiseWanted } = deepDiveText(startup.challenges);
+  const sections = topChallengeSections(startup.challenges)
+    .map((s) => s.section.replace(/_/g, " "))
+    .join(", ");
+  return [startup.name, challengeName, expertiseWanted, sections].filter(Boolean).join("\n").trim();
+}
+
+function emOfferText(em: MatchCandidatePerson): string {
+  const tags = hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags.join(", ") : "";
+  return [em.full_name, em.company_name, em.tagline, tags, em.bio].filter(Boolean).join("\n").trim();
+}
+
+async function embedText(text: string): Promise<number[]> {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured in backend env");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
+    response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: text.slice(0, 8000) }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    data?: Array<{ embedding?: number[] }>;
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(payload?.error?.message || "OpenAI embeddings request failed");
+  const vector = payload?.data?.[0]?.embedding;
+  if (!Array.isArray(vector) || vector.length === 0) throw new Error("Empty embedding response");
+  return vector;
+}
+
+function cachedVector(cache: unknown, expectedHash: string): number[] | null {
+  if (!cache || typeof cache !== "object") return null;
+  const c = cache as { hash?: unknown; model?: unknown; vector?: unknown };
+  if (c.hash !== expectedHash || c.model !== OPENAI_EMBEDDING_MODEL) return null;
+  return Array.isArray(c.vector) && c.vector.length > 0 ? (c.vector as number[]) : null;
+}
+
+type EmbeddingSpec = { key: string; text: string; cached: unknown };
+
+// Reuse the cached vector when the source text is unchanged, otherwise call OpenAI
+// and write it back (best-effort). Never throws — a key that fails is simply absent
+// from the result and its text term is 0 for the day (recovered on the next run).
+async function resolveEmbeddings(
+  specs: EmbeddingSpec[],
+  persist: (key: string, value: Prisma.InputJsonValue) => Promise<unknown>,
+): Promise<Map<string, number[]>> {
+  const out = new Map<string, number[]>();
+  if (!OPENAI_API_KEY) return out;
+
+  const stale: Array<{ key: string; text: string; hash: string }> = [];
+  for (const spec of specs) {
+    const text = spec.text.trim();
+    if (!text) continue;
+    const hash = hashText(`${OPENAI_EMBEDDING_MODEL}:${text}`);
+    const hit = cachedVector(spec.cached, hash);
+    if (hit) out.set(spec.key, hit);
+    else stale.push({ key: spec.key, text, hash });
+  }
+  if (stale.length === 0) return out;
+
+  const results = await Promise.allSettled(stale.map((s) => embedText(s.text)));
+  await Promise.all(
+    results.map(async (r, i) => {
+      if (r.status !== "fulfilled") return;
+      const { key, hash } = stale[i];
+      out.set(key, r.value);
+      try {
+        await persist(key, {
+          hash,
+          model: OPENAI_EMBEDDING_MODEL,
+          vector: r.value,
+        } as Prisma.InputJsonValue);
+      } catch {
+        // Best-effort cache write; the vector is still used for today's run.
+      }
+    }),
+  );
+  return out;
+}
+
+async function loadFounderNeedVectors(
+  founders: MatchCandidatePerson[],
+): Promise<Map<string, number[]>> {
+  const byStartup = new Map<string, EmbeddingSpec>();
+  for (const f of founders) {
+    if (!f.startup_id || !f.startup || byStartup.has(f.startup_id)) continue;
+    byStartup.set(f.startup_id, {
+      key: f.startup_id,
+      text: founderNeedText(f.startup),
+      cached: f.startup.challenge_embedding,
+    });
+  }
+  return resolveEmbeddings([...byStartup.values()], (key, value) =>
+    prisma.startup.update({ where: { id: key }, data: { challenge_embedding: value } }),
+  );
+}
+
+async function loadEmOfferVectors(ems: MatchCandidatePerson[]): Promise<Map<string, number[]>> {
+  return resolveEmbeddings(
+    ems.map((e) => ({ key: e.id, text: emOfferText(e), cached: e.embedding })),
+    (key, value) => prisma.person.update({ where: { id: key }, data: { embedding: value } }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type CandidateScore = {
+  em: MatchCandidatePerson;
+  score: number;
+  tagScore: number;
+  textScore: number;
+};
+
 function scoreCandidates(
   founder: MatchCandidatePerson,
   ems: MatchCandidatePerson[],
   hardExcludedPairs: Set<string>,
-) {
+  ctx?: { founderNeedVec?: number[] | null; emOfferVecs?: Map<string, number[]> },
+): CandidateScore[] {
   const founderTags = hasMeaningfulExpertiseTags(founder.expertise_tags) ? founder.expertise_tags : [];
   const challengeTags = tagsFromChallengeSections(founder.startup?.challenges);
+  const needVec = ctx?.founderNeedVec ?? null;
 
   // Return every viable EM (score > 0); the daily job trims/penalises from here.
   return ems
@@ -819,8 +996,13 @@ function scoreCandidates(
       const emTags = hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags : [];
       const challengeOverlap = emTags.filter((t) => challengeTags.includes(t)).length;
       const directOverlap = emTags.filter((t) => founderTags.includes(t)).length;
-      const score = challengeOverlap * MATCH_WEIGHT_CHALLENGE + directOverlap * MATCH_WEIGHT_DIRECT_TAG;
-      return { em, score };
+      const tagScore =
+        challengeOverlap * MATCH_WEIGHT_CHALLENGE + directOverlap * MATCH_WEIGHT_DIRECT_TAG;
+
+      const emVec = ctx?.emOfferVecs?.get(em.id);
+      const textScore = needVec && emVec ? textSimToPoints(cosineSimilarity(needVec, emVec)) : 0;
+
+      return { em, score: tagScore + textScore, tagScore, textScore };
     })
     .filter((c) => c.score > 0)
     .sort((a, b) => b.score - a.score || a.em.id.localeCompare(b.em.id));
@@ -1021,6 +1203,8 @@ type MatchPlanEntry = {
   em_id: string;
   em: string;
   score: number;
+  tag_score: number;
+  text_score: number;
   weight: number;
   method: string;
   prior_matches: number;
@@ -1028,7 +1212,8 @@ type MatchPlanEntry = {
 
 // Never throws: any unexpected error is caught and returned as { ok: false }, so
 // one bad day can't take down /jobs/run-all. Pass { dryRun: true } to compute the
-// plan (and skip reasons) without writing anything or calling OpenAI.
+// plan + skip reasons without writing any match/notification rows or generating
+// topic text (embeddings are still resolved — cheap and cached).
 async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) {
   const dryRun = opts.dryRun === true;
   try {
@@ -1055,24 +1240,31 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
     }
 
     const founderIds = foundersToProcess.map((f) => f.id);
-    const [emMultiplier, pairInfo] = await Promise.all([
+    const [emMultiplier, pairInfo, founderNeedVecs, emOfferVecs] = await Promise.all([
       loadEmScoreMultipliers(),
       loadPairMultipliers(founderIds, todayKey),
+      loadFounderNeedVectors(foundersToProcess),
+      loadEmOfferVectors(ems),
     ]);
     const { multiplier: pairMultiplier, hardExcluded: hardExcludedPairs, priorCount: pairPriorCount } =
       pairInfo;
     const weightOf = (founderId: string, emId: string, score: number) =>
       score * (emMultiplier.get(emId) ?? 1) * (pairMultiplier.get(`${founderId}:${emId}`) ?? 1);
 
-    // 1. Score every founder's candidate EMs. `score` is raw affinity (persisted);
-    //    `weight` folds in the EM's recent "useful" feedback and the repeated-pair
-    //    cooldown, and drives the assignment. Pairs matched in the last day are
-    //    dropped outright (hardExcludedPairs).
-    const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
+    // 1. Score every founder's candidate EMs. `score` = tag overlap + semantic
+    //    similarity (both persisted as `score`); `weight` folds in the EM's recent
+    //    "useful" feedback and the repeated-pair cooldown, and drives the
+    //    assignment. Pairs matched in the last day are dropped (hardExcludedPairs).
+    const shortlistByFounder = new Map<string, CandidateScore[]>();
+    const scoreByPair = new Map<string, CandidateScore>();
     const edges: Array<{ founderId: string; emId: string; score: number; weight: number }> = [];
     for (const founder of foundersToProcess) {
-      const shortlist = scoreCandidates(founder, ems, hardExcludedPairs);
+      const shortlist = scoreCandidates(founder, ems, hardExcludedPairs, {
+        founderNeedVec: founder.startup_id ? founderNeedVecs.get(founder.startup_id) : null,
+        emOfferVecs,
+      });
       shortlistByFounder.set(founder.id, shortlist);
+      for (const c of shortlist) scoreByPair.set(`${founder.id}:${c.em.id}`, c);
       for (const { em, score } of shortlist) {
         edges.push({
           founderId: founder.id,
@@ -1126,18 +1318,22 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
 
     const emById = new Map(ems.map((em) => [em.id, em]));
     const founderById = new Map(foundersToProcess.map((f) => [f.id, f]));
+    const round2 = (n: number) => Math.round(n * 100) / 100;
     const plan: MatchPlanEntry[] = [];
     for (const [founderId, chosen] of assignment) {
       const founder = founderById.get(founderId);
       const em = emById.get(chosen.emId);
       if (!founder || !em) continue;
+      const breakdown = scoreByPair.get(`${founderId}:${chosen.emId}`);
       plan.push({
         founder_id: founderId,
         founder: founder.full_name,
         em_id: chosen.emId,
         em: em.full_name,
-        score: chosen.score,
-        weight: weightOf(founderId, chosen.emId, chosen.score),
+        score: round2(chosen.score),
+        tag_score: round2(breakdown?.tagScore ?? 0),
+        text_score: round2(breakdown?.textScore ?? 0),
+        weight: round2(weightOf(founderId, chosen.emId, chosen.score)),
         method: chosen.method,
         prior_matches: pairPriorCount.get(`${founderId}:${chosen.emId}`) ?? 0,
       });
@@ -1178,6 +1374,7 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
 
         const shortlist = shortlistByFounder.get(founder.id) ?? [];
         const priorMatches = pairPriorCount.get(`${founder.id}:${em.id}`) ?? 0;
+        const breakdown = scoreByPair.get(`${founder.id}:${em.id}`);
 
         await prisma.$transaction(async (tx) => {
           const createdMatch = await tx.match.create({
@@ -1189,7 +1386,12 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
               score: chosen.score,
               candidate_pool: shortlist
                 .slice(0, MATCH_CANDIDATE_POOL_SIZE)
-                .map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
+                .map((c) => ({
+                  em_id: c.em.id,
+                  score: Math.round(c.score * 100) / 100,
+                  tag: c.tagScore,
+                  text: Math.round(c.textScore * 100) / 100,
+                })) as Prisma.InputJsonValue,
               selection_method: chosen.method,
               // reason_text holds the suggested conversation topic (headline shown in the UI).
               reason_text: topic,
@@ -1199,6 +1401,10 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
                 opener,
                 source: topicSource,
                 prior_matches: priorMatches,
+                score_breakdown: {
+                  tag: breakdown?.tagScore ?? 0,
+                  text: Math.round((breakdown?.textScore ?? 0) * 100) / 100,
+                },
               } as Prisma.InputJsonValue,
             },
           });

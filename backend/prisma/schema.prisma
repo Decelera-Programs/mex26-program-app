@@ -46,6 +46,9 @@ model Person {
   arrival_date   DateTime? @db.Timestamptz(6)
   departure_date DateTime? @db.Timestamptz(6)
   expertise_tags Json     @default("[]")
+  /// Cached OpenAI embedding of the EM profile text, for the daily match's semantic
+  /// scoring. Shape: { hash, model, vector }. Recomputed only when the source text changes.
+  embedding      Json?
   schedule_feedback           Json?
   daily_checkin               Json?
   post_program_expectations   Json?
@@ -104,6 +107,10 @@ model Startup {
   description     String?
   one_pager_url  String?
   challenges      Json?
+  /// Cached OpenAI embedding of the founder "need" text (challenge_name +
+  /// expertise_wanted + top challenge sections), for the daily match's semantic
+  /// scoring. Shape: { hash, model, vector }. Recomputed only when the text changes.
+  challenge_embedding Json?
 
   people    Person[]
   oneOnOnes OneOnOne[]
