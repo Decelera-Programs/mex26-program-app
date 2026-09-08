@@ -88,9 +88,10 @@ const MATCH_WEIGHT_CHALLENGE = 3;
 const MATCH_WEIGHT_DIRECT_TAG = 1;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
 const MATCH_EM_DAILY_CAPACITY_CAP = 4;
-// A challenge section counts as "a real problem" at this average severity (ratings are 1-4).
-// Observed severities in the Mexico 2026 cohort cluster around 2.0-3.4, so 3.0 was too strict
-// and left most founders scoring against a single section.
+// A challenge section counts as "a real problem" at this average severity.
+// Ratings are 1-4 ("1 — Not a priority" ... "4 — Critical / blocking"), so requiring an
+// average >= 3 meant every sub-topic had to be an active pain point — too strict; most
+// founders then scored against a single section. 2.5 is a saner bar.
 const MATCH_CHALLENGE_SEVERITY_THRESHOLD = 2.5;
 
 // Maps a founder's worst-rated challenge sections to expertise_tags likely to help with them.
@@ -108,9 +109,9 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
     "Product", "AI", "Big data", "Tech Background", "Platform thinking",
     "Mobile applications", "Enterprise applications", "Deeptech",
   ],
-  // Broadened beyond pure marketing/comms tags: in this cohort ~60% of founders are weakest
-  // here but only a handful of EMs carry those tags, so adjacent growth/GTM/consumer expertise
-  // (channels, positioning, category) is included to relieve the bottleneck.
+  // Broadened beyond pure marketing/comms tags on purpose: for an early-stage startup,
+  // marketing / positioning / channels overlap heavily with growth & GTM, and EMs carrying
+  // literal marketing tags are always scarce. Adjacent growth/GTM/consumer expertise counts.
   marketing_communication: [
     "Digital marketing", "Inbound marketing", "Communication", "Brand",
     "GTM", "Sales / Growth", "B2C",
@@ -118,14 +119,10 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
 };
 
 // The (founder, EM) pair is decided by the global assignment; OpenAI only writes
-// the conversation prompt: a concrete thing to talk about + a line the founder
-// can literally say to start it informally.
-const matchTopicSchema = z
-  .object({
-    topic: z.string().min(1).max(400),
-    opener: z.string().min(1).max(400),
-  })
-  .strict();
+// the conversation prompt: `topic` (a concrete thing to talk about) + `opener`
+// (a line the founder can literally say). Parsed leniently in writeMatchTopic —
+// over-long strings are clipped, a missing opener is tolerated, only a missing
+// topic falls back to the deterministic text.
 
 // One tap after a match: "did you talk?" and, if so, "was it useful?".
 const matchFeedbackSchema = z
@@ -675,8 +672,10 @@ async function runTeamNoteTranscriptionJob(limit = 10) {
 
 function parseRatingSeverity(ratingText: unknown): number | null {
   if (typeof ratingText !== "string") return null;
-  const match = ratingText.match(/^(\d+)/);
-  return match ? Number(match[1]) : null;
+  const match = ratingText.match(/^\s*(\d+)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
 }
 
 function hasMeaningfulExpertiseTags(tags: unknown): tags is string[] {
@@ -694,11 +693,14 @@ function hasMeaningfulChallenges(challenges: unknown): boolean {
 }
 
 function topChallengeSections(challenges: unknown): Array<{ section: string; avgSeverity: number }> {
+  const root = challenges && typeof challenges === "object" ? (challenges as { sections?: unknown }) : {};
   const sections =
-    (challenges as { sections?: Record<string, { ratings?: Record<string, unknown> } | null> } | null)?.sections || {};
+    root.sections && typeof root.sections === "object" ? (root.sections as Record<string, unknown>) : {};
   const scored = Object.entries(sections)
     .map(([section, data]) => {
-      const values = Object.values(data?.ratings || {})
+      const ratings = data && typeof data === "object" ? (data as { ratings?: unknown }).ratings : null;
+      const ratingsObj = ratings && typeof ratings === "object" ? (ratings as Record<string, unknown>) : {};
+      const values = Object.values(ratingsObj)
         .map(parseRatingSeverity)
         .filter((v): v is number => v != null);
       if (values.length === 0) return null;
@@ -755,11 +757,15 @@ async function loadMatchingPoolForToday() {
     },
   });
 
-  const presentToday = people.filter((p) => {
-    const arrivalKey = dateKeyInTimezone(p.arrival_date, MATCHING_TIMEZONE);
-    const departureKey = dateKeyInTimezone(p.departure_date, MATCHING_TIMEZONE);
-    return (!arrivalKey || arrivalKey <= todayKey) && (!departureKey || departureKey >= todayKey);
-  });
+  const presentIds = new Set(
+    people
+      .filter((p) => {
+        const arrivalKey = dateKeyInTimezone(p.arrival_date, MATCHING_TIMEZONE);
+        const departureKey = dateKeyInTimezone(p.departure_date, MATCHING_TIMEZONE);
+        return (!arrivalKey || arrivalKey <= todayKey) && (!departureKey || departureKey >= todayKey);
+      })
+      .map((p) => p.id),
+  );
 
   const alreadyMatchedToday = new Set(
     (
@@ -770,17 +776,32 @@ async function loadMatchingPoolForToday() {
     ).map((m) => m.founder_id),
   );
 
-  const founders = presentToday.filter(
+  const excludedFounders: Array<{ id: string; full_name: string; reason: string }> = [];
+  const founders: typeof people = [];
+  for (const p of people) {
+    if (p.contact_type !== "founder") continue;
+    if (alreadyMatchedToday.has(p.id)) {
+      excludedFounders.push({ id: p.id, full_name: p.full_name, reason: "already_matched_today" });
+    } else if (!presentIds.has(p.id)) {
+      excludedFounders.push({ id: p.id, full_name: p.full_name, reason: "not_present_today" });
+    } else if (
+      !hasMeaningfulExpertiseTags(p.expertise_tags) &&
+      !hasMeaningfulChallenges(p.startup?.challenges)
+    ) {
+      excludedFounders.push({ id: p.id, full_name: p.full_name, reason: "no_challenges_or_tags" });
+    } else {
+      founders.push(p);
+    }
+  }
+
+  const ems = people.filter(
     (p) =>
-      p.contact_type === "founder" &&
-      !alreadyMatchedToday.has(p.id) &&
-      (hasMeaningfulExpertiseTags(p.expertise_tags) || hasMeaningfulChallenges(p.startup?.challenges)),
-  );
-  const ems = presentToday.filter(
-    (p) => p.contact_type === "experience_maker" && hasMeaningfulExpertiseTags(p.expertise_tags),
+      p.contact_type === "experience_maker" &&
+      presentIds.has(p.id) &&
+      hasMeaningfulExpertiseTags(p.expertise_tags),
   );
 
-  return { founders, ems, todayKey };
+  return { founders, ems, todayKey, excludedFounders };
 }
 
 function scoreCandidates(
@@ -881,7 +902,20 @@ async function writeMatchTopic(
   if (!raw) {
     throw new Error("Empty OpenAI matching response");
   }
-  return matchTopicSchema.parse(JSON.parse(raw));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("OpenAI matching response was not valid JSON");
+  }
+  const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  const clip = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 400) : "");
+  const topic = clip(obj.topic);
+  const opener = clip(obj.opener);
+  if (!topic) {
+    throw new Error("OpenAI matching response missing a usable topic");
+  }
+  return { topic, opener };
 }
 
 // Used when OpenAI is unavailable: a deterministic topic + opener from tag overlap.
@@ -980,170 +1014,239 @@ async function loadPairMultipliers(founderIds: string[], todayKey: string) {
   return { multiplier, hardExcluded, priorCount };
 }
 
-async function runDailyMatchingJob(limit = 50) {
-  const { founders, ems, todayKey } = await loadMatchingPoolForToday();
-  const foundersToProcess = founders.slice(0, limit);
+type MatchSkip = { id: string; full_name: string; reason: string };
+type MatchPlanEntry = {
+  founder_id: string;
+  founder: string;
+  em_id: string;
+  em: string;
+  score: number;
+  weight: number;
+  method: string;
+  prior_matches: number;
+};
 
-  if (foundersToProcess.length === 0 || ems.length === 0) {
-    return {
-      processed: 0,
-      matched: 0,
-      matched_via_fill: 0,
-      skipped_no_candidates: 0,
-      failed: 0,
-      em_capacity: 0,
+// Never throws: any unexpected error is caught and returned as { ok: false }, so
+// one bad day can't take down /jobs/run-all. Pass { dryRun: true } to compute the
+// plan (and skip reasons) without writing anything or calling OpenAI.
+async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) {
+  const dryRun = opts.dryRun === true;
+  try {
+    const { founders, ems, todayKey, excludedFounders } = await loadMatchingPoolForToday();
+    const foundersToProcess = founders.slice(0, limit);
+    const base = {
+      ok: true as const,
+      dry_run: dryRun,
+      today: todayKey,
+      pool: { founders: founders.length, ems: ems.length, processed: foundersToProcess.length },
     };
-  }
 
-  const founderIds = foundersToProcess.map((f) => f.id);
-  const [emMultiplier, pairInfo] = await Promise.all([
-    loadEmScoreMultipliers(),
-    loadPairMultipliers(founderIds, todayKey),
-  ]);
-  const { multiplier: pairMultiplier, hardExcluded: hardExcludedPairs, priorCount: pairPriorCount } =
-    pairInfo;
+    if (foundersToProcess.length === 0 || ems.length === 0) {
+      return {
+        ...base,
+        em_capacity: 0,
+        matched: 0,
+        matched_via_fill: 0,
+        failed: 0,
+        skipped_already_matched: 0,
+        skipped: excludedFounders as MatchSkip[],
+        plan: [] as MatchPlanEntry[],
+      };
+    }
 
-  // 1. Score every founder's candidate EMs. `score` is raw affinity (persisted);
-  //    `weight` folds in the EM's recent "useful" feedback and the repeated-pair
-  //    cooldown, and drives the assignment. Pairs matched in the last day are
-  //    dropped outright (hardExcludedPairs).
-  const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
-  const edges: Array<{ founderId: string; emId: string; score: number; weight: number }> = [];
-  for (const founder of foundersToProcess) {
-    const shortlist = scoreCandidates(founder, ems, hardExcludedPairs);
-    shortlistByFounder.set(founder.id, shortlist);
-    for (const { em, score } of shortlist) {
-      const key = `${founder.id}:${em.id}`;
-      edges.push({
-        founderId: founder.id,
-        emId: em.id,
-        score,
-        weight: score * (emMultiplier.get(em.id) ?? 1) * (pairMultiplier.get(key) ?? 1),
+    const founderIds = foundersToProcess.map((f) => f.id);
+    const [emMultiplier, pairInfo] = await Promise.all([
+      loadEmScoreMultipliers(),
+      loadPairMultipliers(founderIds, todayKey),
+    ]);
+    const { multiplier: pairMultiplier, hardExcluded: hardExcludedPairs, priorCount: pairPriorCount } =
+      pairInfo;
+    const weightOf = (founderId: string, emId: string, score: number) =>
+      score * (emMultiplier.get(emId) ?? 1) * (pairMultiplier.get(`${founderId}:${emId}`) ?? 1);
+
+    // 1. Score every founder's candidate EMs. `score` is raw affinity (persisted);
+    //    `weight` folds in the EM's recent "useful" feedback and the repeated-pair
+    //    cooldown, and drives the assignment. Pairs matched in the last day are
+    //    dropped outright (hardExcludedPairs).
+    const shortlistByFounder = new Map<string, ReturnType<typeof scoreCandidates>>();
+    const edges: Array<{ founderId: string; emId: string; score: number; weight: number }> = [];
+    for (const founder of foundersToProcess) {
+      const shortlist = scoreCandidates(founder, ems, hardExcludedPairs);
+      shortlistByFounder.set(founder.id, shortlist);
+      for (const { em, score } of shortlist) {
+        edges.push({
+          founderId: founder.id,
+          emId: em.id,
+          score,
+          weight: weightOf(founder.id, em.id, score),
+        });
+      }
+    }
+
+    // 2. Global greedy assignment by weight: each founder gets <=1 EM, each EM gets
+    //    <= capacity founders/day. A second pass at capacity+1 rescues founders who
+    //    still have no slot, so nobody is left without a recommendation.
+    const capacity = Math.min(
+      MATCH_EM_DAILY_CAPACITY_CAP,
+      Math.max(1, Math.ceil(foundersToProcess.length / ems.length)),
+    );
+    edges.sort(
+      (a, b) =>
+        b.weight - a.weight ||
+        a.founderId.localeCompare(b.founderId) ||
+        a.emId.localeCompare(b.emId),
+    );
+
+    const assignment = new Map<string, { emId: string; score: number; method: string }>();
+    const emLoad = new Map<string, number>();
+    const tryAssign = (
+      edge: { founderId: string; emId: string; score: number; weight: number },
+      method: string,
+      cap: number,
+    ) => {
+      if (assignment.has(edge.founderId)) return;
+      if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
+      assignment.set(edge.founderId, { emId: edge.emId, score: edge.score, method });
+      emLoad.set(edge.emId, (emLoad.get(edge.emId) ?? 0) + 1);
+    };
+    for (const edge of edges) tryAssign(edge, "global_greedy", capacity);
+    for (const edge of edges) tryAssign(edge, "global_fill", capacity + 1);
+
+    // Skip list: founders excluded from the pool + processed founders with no slot.
+    const skipped: MatchSkip[] = [...excludedFounders];
+    for (const founder of foundersToProcess) {
+      if (assignment.has(founder.id)) continue;
+      const hadCandidates = (shortlistByFounder.get(founder.id)?.length ?? 0) > 0;
+      skipped.push({
+        id: founder.id,
+        full_name: founder.full_name,
+        reason: hadCandidates ? "all_candidates_at_capacity" : "no_scoring_overlap",
       });
     }
-  }
 
-  // 2. Global greedy assignment by score: each founder gets <=1 EM, each EM gets
-  //    <= capacity founders/day. A second pass at capacity+1 rescues founders who
-  //    still have no slot, so nobody is left without a recommendation.
-  const capacity = Math.min(
-    MATCH_EM_DAILY_CAPACITY_CAP,
-    Math.max(1, Math.ceil(foundersToProcess.length / ems.length)),
-  );
-  edges.sort(
-    (a, b) =>
-      b.weight - a.weight ||
-      a.founderId.localeCompare(b.founderId) ||
-      a.emId.localeCompare(b.emId),
-  );
-
-  const assignment = new Map<string, { emId: string; score: number; method: string }>();
-  const emLoad = new Map<string, number>();
-  const tryAssign = (
-    edge: { founderId: string; emId: string; score: number; weight: number },
-    method: string,
-    cap: number,
-  ) => {
-    if (assignment.has(edge.founderId)) return;
-    if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
-    assignment.set(edge.founderId, { emId: edge.emId, score: edge.score, method });
-    emLoad.set(edge.emId, (emLoad.get(edge.emId) ?? 0) + 1);
-  };
-  for (const edge of edges) tryAssign(edge, "global_greedy", capacity);
-  for (const edge of edges) tryAssign(edge, "global_fill", capacity + 1);
-
-  // 3. Persist one Match + two notifications per assigned founder.
-  const emById = new Map(ems.map((em) => [em.id, em]));
-  let matched = 0;
-  let matchedViaFill = 0;
-  let skippedNoCandidates = 0;
-  let failed = 0;
-  const matchDate = new Date(`${todayKey}T00:00:00.000Z`);
-
-  for (const founder of foundersToProcess) {
-    const chosen = assignment.get(founder.id);
-    if (!chosen) {
-      // No candidates, or every candidate EM was already at capacity+1.
-      skippedNoCandidates += 1;
-      continue;
+    const emById = new Map(ems.map((em) => [em.id, em]));
+    const founderById = new Map(foundersToProcess.map((f) => [f.id, f]));
+    const plan: MatchPlanEntry[] = [];
+    for (const [founderId, chosen] of assignment) {
+      const founder = founderById.get(founderId);
+      const em = emById.get(chosen.emId);
+      if (!founder || !em) continue;
+      plan.push({
+        founder_id: founderId,
+        founder: founder.full_name,
+        em_id: chosen.emId,
+        em: em.full_name,
+        score: chosen.score,
+        weight: weightOf(founderId, chosen.emId, chosen.score),
+        method: chosen.method,
+        prior_matches: pairPriorCount.get(`${founderId}:${chosen.emId}`) ?? 0,
+      });
     }
-    const em = emById.get(chosen.emId);
-    if (!em) {
-      failed += 1;
-      continue;
+    plan.sort((a, b) => b.score - a.score);
+
+    if (dryRun) {
+      return { ...base, em_capacity: capacity, would_match: plan.length, plan, skipped };
     }
 
-    try {
-      let { topic, opener } = fallbackMatchTopic(founder, em);
-      let topicSource = "fallback";
-      try {
-        const written = await writeMatchTopic(founder, em);
-        topic = written.topic;
-        opener = written.opener;
-        topicSource = "ai";
-      } catch {
-        // Keep the deterministic fallback text.
+    // 3. Persist one Match + two notifications per assigned founder (atomically).
+    let matched = 0;
+    let matchedViaFill = 0;
+    let failed = 0;
+    let skippedAlreadyMatched = 0;
+    const matchDate = new Date(`${todayKey}T00:00:00.000Z`);
+
+    for (const founder of foundersToProcess) {
+      const chosen = assignment.get(founder.id);
+      if (!chosen) continue; // already recorded in `skipped`
+      const em = emById.get(chosen.emId);
+      if (!em) {
+        failed += 1;
+        continue;
       }
 
-      const shortlist = shortlistByFounder.get(founder.id) ?? [];
-      const priorMatches = pairPriorCount.get(`${founder.id}:${em.id}`) ?? 0;
-      const createdMatch = await prisma.match.create({
-        data: {
-          match_date: matchDate,
-          founder_id: founder.id,
-          em_id: em.id,
-          startup_id: founder.startup_id,
-          score: chosen.score,
-          candidate_pool: shortlist
-            .slice(0, MATCH_CANDIDATE_POOL_SIZE)
-            .map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
-          selection_method: chosen.method,
-          // reason_text holds the suggested conversation topic (headline shown in the UI).
-          reason_text: topic,
-          // opener lives here (no dedicated column yet); /matches/me reads it back.
-          ai_raw_response: {
-            topic,
-            opener,
-            source: topicSource,
-            prior_matches: priorMatches,
-          } as Prisma.InputJsonValue,
-        },
-      });
+      try {
+        let { topic, opener } = fallbackMatchTopic(founder, em);
+        let topicSource = "fallback";
+        try {
+          const written = await writeMatchTopic(founder, em);
+          topic = written.topic;
+          opener = written.opener;
+          topicSource = "ai";
+        } catch {
+          // Keep the deterministic fallback text.
+        }
 
-      await prisma.notification.createMany({
-        data: [
-          {
-            id: crypto.randomUUID(),
-            user_id: founder.id,
-            message: topic,
-            sent_at: new Date(),
-            match_id: createdMatch.id,
-          },
-          {
-            id: crypto.randomUUID(),
-            user_id: em.id,
-            message: topic,
-            sent_at: new Date(),
-            match_id: createdMatch.id,
-          },
-        ],
-      });
+        const shortlist = shortlistByFounder.get(founder.id) ?? [];
+        const priorMatches = pairPriorCount.get(`${founder.id}:${em.id}`) ?? 0;
 
-      matched += 1;
-      if (chosen.method === "global_fill") matchedViaFill += 1;
-    } catch {
-      failed += 1;
+        await prisma.$transaction(async (tx) => {
+          const createdMatch = await tx.match.create({
+            data: {
+              match_date: matchDate,
+              founder_id: founder.id,
+              em_id: em.id,
+              startup_id: founder.startup_id,
+              score: chosen.score,
+              candidate_pool: shortlist
+                .slice(0, MATCH_CANDIDATE_POOL_SIZE)
+                .map((c) => ({ em_id: c.em.id, score: c.score })) as Prisma.InputJsonValue,
+              selection_method: chosen.method,
+              // reason_text holds the suggested conversation topic (headline shown in the UI).
+              reason_text: topic,
+              // opener lives here (no dedicated column yet); /matches/me reads it back.
+              ai_raw_response: {
+                topic,
+                opener,
+                source: topicSource,
+                prior_matches: priorMatches,
+              } as Prisma.InputJsonValue,
+            },
+          });
+          await tx.notification.createMany({
+            data: [
+              {
+                id: crypto.randomUUID(),
+                user_id: founder.id,
+                message: topic,
+                sent_at: new Date(),
+                match_id: createdMatch.id,
+              },
+              {
+                id: crypto.randomUUID(),
+                user_id: em.id,
+                message: topic,
+                sent_at: new Date(),
+                match_id: createdMatch.id,
+              },
+            ],
+          });
+        });
+
+        matched += 1;
+        if (chosen.method === "global_fill") matchedViaFill += 1;
+      } catch (error) {
+        // Unique(founder_id, match_date) race -> the founder already has today's match.
+        if ((error as { code?: string })?.code === "P2002") skippedAlreadyMatched += 1;
+        else failed += 1;
+      }
     }
-  }
 
-  return {
-    processed: foundersToProcess.length,
-    matched,
-    matched_via_fill: matchedViaFill,
-    skipped_no_candidates: skippedNoCandidates,
-    failed,
-    em_capacity: capacity,
-  };
+    return {
+      ...base,
+      em_capacity: capacity,
+      matched,
+      matched_via_fill: matchedViaFill,
+      failed,
+      skipped_already_matched: skippedAlreadyMatched,
+      skipped,
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      dry_run: dryRun,
+      error: error instanceof Error ? error.message : "Unknown matching job error",
+    };
+  }
 }
 
 const JWKS = SUPABASE_URL
@@ -2913,8 +3016,11 @@ app.post("/jobs/matching/run", requireJobsApiKey, async (req, res) => {
   try {
     const parsedLimit = z.coerce.number().int().min(1).max(200).optional().safeParse(req.query.limit);
     const limit = parsedLimit.success && parsedLimit.data ? parsedLimit.data : 50;
-    const result = await runDailyMatchingJob(limit);
-    res.json({ ok: true, ...result });
+    const dryRun = ["1", "true", "yes"].includes(
+      String(req.query.dryRun ?? req.query.dry_run ?? "").toLowerCase(),
+    );
+    const result = await runDailyMatchingJob(limit, { dryRun });
+    res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to run matching job";
     res.status(500).json({ error: message });

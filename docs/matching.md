@@ -34,7 +34,8 @@ never picks the person.
 |---|---|---|
 | `MATCHING_TIMEZONE` | `America/Mexico_City` | "Today" + presence checks for the job. |
 | `MATCH_WEIGHT_CHALLENGE` | `3` | Weight of an EM tag that matches a founder's weak challenge area. |
-| `MATCH_WEIGHT_DIRECT_TAG` | `1` | Weight of an EM tag that matches a founder's own expertise tag. |
+| `MATCH_WEIGHT_DIRECT_TAG` | `1` | Weight of an EM tag that matches a founder's own expertise tag. In practice founders rarely have `expertise_tags`, so this term is usually 0. |
+| `MATCH_CHALLENGE_SEVERITY_THRESHOLD` | `2.5` | A challenge section is "a real problem" at this average rating (1–4). Sections at/above it (top 2) drive the tag mapping; if none qualify, the top 2 by average are used. |
 | `MATCH_CANDIDATE_POOL_SIZE` | `10` | How many candidates are stored in `Match.candidate_pool` (analysis only; no longer limits the assignment). |
 | `MATCH_EM_DAILY_CAPACITY_CAP` | `4` | Hard ceiling on founders per EM per day. Lower it if EMs feel swamped. |
 | `MATCH_FEEDBACK_LOOKBACK_DAYS` | `14` | Window of feedback used for EM reputation. |
@@ -92,9 +93,33 @@ opinion"). `at` is an ISO timestamp.
 | `GET /matches/me` | Supabase bearer | The caller's match **for today** (or `{ match: null }`). Returns `role`, `counterpart`, `reason_text` (topic), `opener` (founders), `my_feedback`. |
 | `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: boolean, useful?: boolean\|null }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`. |
 | `POST /jobs/matching/run?limit=N` | `x-job-key` | Run the job standalone (`N` = 1–200, default 50). |
+| `POST /jobs/matching/run?dryRun=1` | `x-job-key` | **Preview**: runs pool → score → assignment and returns the plan + skip reasons **without writing anything or calling OpenAI**. Use it to sanity-check pairings before a program starts, and to tune. |
 | `POST /jobs/run-all` | `x-job-key` | Cron entry point; runs matching (limit 50) among other jobs. |
 
-Job result shape: `{ processed, matched, matched_via_fill, skipped_no_candidates, failed, em_capacity }`.
+`runDailyMatchingJob` never throws — on an unexpected error it returns `{ ok: false, error }`
+(so one bad day can't take down `/jobs/run-all`).
+
+Result shape:
+
+```jsonc
+{
+  "ok": true,
+  "dry_run": false,
+  "today": "2026-11-10",
+  "pool": { "founders": 20, "ems": 26, "processed": 20 },
+  "em_capacity": 1,
+  "matched": 18,
+  "matched_via_fill": 2,
+  "failed": 0,
+  "skipped_already_matched": 0,
+  "skipped": [ { "id": "...", "full_name": "...", "reason": "no_challenges_or_tags" } ]
+  // dry run instead adds: "would_match", "plan": [ { founder, em, score, weight, method, prior_matches } ]
+}
+```
+
+`skipped` reasons: `already_matched_today`, `not_present_today`, `no_challenges_or_tags`
+(excluded from the pool), `no_scoring_overlap`, `all_candidates_at_capacity` (in the pool
+but unmatched today).
 
 ## Observability
 
@@ -142,7 +167,7 @@ group by e.full_name order by founders_matched desc;
 | EMs report being swamped | Lower `MATCH_EM_DAILY_CAPACITY_CAP` (e.g. `3`). |
 | Founders keep getting matched to the same few EMs | Shorten `MATCH_PAIR_COOLDOWN_DAYS` so more EMs stay eligible — or (better) check whether the tag data / `MATCH_SECTION_TO_TAGS` is too narrow. |
 | A bad match keeps coming back | Confirm the founder submitted `useful: false`; `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` (10) should hold it for the rest of a normal program. |
-| Lots of `skipped_no_candidates` | Pool too thin — usually missing `expertise_tags` on EMs or missing `challenges` on startups. Check the pool query, not the algorithm. |
+| Lots of `skipped` with `no_challenges_or_tags` / `no_scoring_overlap` | Pool too thin — usually missing `expertise_tags` on EMs or missing `challenges` on startups. Check the data, not the algorithm. |
 | Topics feel generic | Improve `challenges.deep_dive` / `challenges.sections` data quality, or the system prompt in `writeMatchTopic`. |
 | OpenAI down / `source: "fallback"` everywhere | Check `OPENAI_API_KEY`; the fallback text still works, it's just blander. |
 
