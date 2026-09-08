@@ -22,8 +22,9 @@ React SPA (Vite)                     Express API (backend/)              Supabas
 - **Auth**: Supabase Auth. The client holds the session; the backend verifies the JWT on every
   request and resolves it to a `Person` row (by `user_id`, falling back to email with auto-link).
 - **Backend**: single Express app (`backend/src/index.ts`) talking to Supabase Postgres via Prisma.
-- **Scheduled work**: a GitHub Actions cron (`.github/workflows/run-jobs.yml`, every 5 min) calls
-  `POST /jobs/run-all` with a shared secret. See [Scheduled jobs](#scheduled-jobs).
+- **Scheduled work**: the backend runs the full job set on an in-process 5-minute interval (no
+  external scheduler). `POST /jobs/run-all` triggers the same set on demand. See
+  [Scheduled jobs](#scheduled-jobs).
 - **Hosting**: Railway (frontend and backend as separate services).
 
 ## Repo layout
@@ -139,8 +140,10 @@ Auth: `requireSupabaseAuth` validates the `Authorization: Bearer <jwt>` on all r
 
 ## Scheduled jobs
 
-`.github/workflows/run-jobs.yml` runs every 5 minutes and calls `POST /jobs/run-all`
-(`BACKEND_BASE_URL` + `JOBS_API_KEY` come from repo secrets). `run-all` chains:
+`runAllScheduledJobs` runs on an in-process `setInterval` every 5 minutes (plus once
+~15 s after boot). `POST /jobs/run-all` (auth: `x-job-key`, or open if `JOBS_API_KEY`
+is unset) runs the exact same set on demand. Runs are guarded against overlap, and
+each sub-job is isolated so one failure doesn't skip the rest. The set:
 
 1. **30-min reminders** — `Notification` rows for events starting soon.
 2. **Scheduled campaigns** — dispatch campaigns whose `scheduled_for` is due.

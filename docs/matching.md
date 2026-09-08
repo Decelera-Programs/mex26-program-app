@@ -11,9 +11,10 @@ on Home.
 
 ## Daily pipeline (`runDailyMatchingJob`, `backend/src/index.ts`)
 
-Runs from the 5-minute cron (`POST /jobs/run-all`) and standalone
-(`POST /jobs/matching/run?limit=N`). Idempotent per day: a founder already
-matched today is skipped, and `unique(match.founder_id, match_date)` is a backstop.
+Runs from the backend's in-process 5-minute job loop (`runAllScheduledJobs`), and
+standalone via `POST /jobs/run-all` or `POST /jobs/matching/run?limit=N`. Idempotent
+per day: a founder already matched today is skipped, and
+`unique(match.founder_id, match_date)` is a backstop.
 
 | # | Step | Function |
 |---|---|---|
@@ -119,7 +120,7 @@ and `Startup.challenge_embedding`, both `jsonb` `{ hash, model, vector }`.
 | `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: boolean, useful?: boolean\|null }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`. |
 | `POST /jobs/matching/run?limit=N` | `x-job-key` | Run the job standalone (`N` = 1–200, default 50). |
 | `POST /jobs/matching/run?dryRun=1` | `x-job-key` | **Preview**: runs pool → score → assignment and returns the plan + skip reasons **without writing any `match`/`notification` rows or generating topic text**. (It does resolve embeddings — cheap and cached — so `text_score` in the plan is real.) Use it to sanity-check pairings before a program starts, and to tune. |
-| `POST /jobs/run-all` | `x-job-key` | Cron entry point; runs matching (limit 50) among other jobs. |
+| `POST /jobs/run-all` | `x-job-key` | Runs the full job set once (matching at limit 50, + reminders / campaigns / push / transcription). The backend also fires this set every 5 min in-process. |
 
 `runDailyMatchingJob` never throws — on an unexpected error it returns `{ ok: false, error }`
 (so one bad day can't take down `/jobs/run-all`).

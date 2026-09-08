@@ -1455,6 +1455,49 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
   }
 }
 
+// The full periodic job set. Driven both by POST /jobs/run-all (manual / external
+// cron) and by an in-process interval (see the bottom of this file) — the backend
+// is always up while a program runs, so it schedules its own jobs. Guarded so a
+// slow run never overlaps the next tick; each sub-job is isolated so one failure
+// doesn't skip the rest.
+let scheduledJobsRunning = false;
+
+async function runAllScheduledJobs(reason: string) {
+  if (scheduledJobsRunning) {
+    return { ok: true as const, reason, skipped: "already_running" as const };
+  }
+  scheduledJobsRunning = true;
+  const ranAt = new Date();
+  const safe = async (name: string, fn: () => Promise<unknown>) => {
+    try {
+      return await fn();
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : `${name} failed` };
+    }
+  };
+  try {
+    const reminders = await safe("reminders", () => triggerThirtyMinuteReminders(ranAt));
+    const campaigns = await safe("campaigns", () => runScheduledCampaignDispatch(ranAt));
+    const push = await safe("push", () => runPushDispatch(reason));
+    const transcriptions = await safe("transcriptions", () => runOneOnOneTranscriptionJob(20));
+    const teamTranscriptions = await safe("teamTranscriptions", () => runTeamNoteTranscriptionJob(20));
+    const matching = await safe("matching", () => runDailyMatchingJob(50));
+    return {
+      ok: true as const,
+      reason,
+      ran_at: ranAt,
+      reminders,
+      campaigns,
+      push,
+      transcriptions,
+      teamTranscriptions,
+      matching,
+    };
+  } finally {
+    scheduledJobsRunning = false;
+  }
+}
+
 const JWKS = SUPABASE_URL
   ? createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`))
   : null;
@@ -3175,23 +3218,8 @@ app.post("/jobs/notifications/push-dispatch", requireJobsApiKey, async (_req, re
 });
 
 app.post("/jobs/run-all", requireJobsApiKey, async (_req, res) => {
-  const now = new Date();
-  const reminders = await triggerThirtyMinuteReminders(now);
-  const campaigns = await runScheduledCampaignDispatch(now);
-  const push = await runPushDispatch("cron");
-  const transcriptions = await runOneOnOneTranscriptionJob(20);
-  const teamTranscriptions = await runTeamNoteTranscriptionJob(20);
-  const matching = await runDailyMatchingJob(50);
-  res.json({
-    ok: true,
-    ran_at: now,
-    reminders,
-    campaigns,
-    push,
-    transcriptions,
-    teamTranscriptions,
-    matching,
-  });
+  const result = await runAllScheduledJobs("manual");
+  res.json(result);
 });
 
 app.post("/jobs/transcriptions/one-on-ones", requireJobsApiKey, async (req, res) => {
@@ -3304,10 +3332,20 @@ setInterval(() => {
   });
 }, 30000);
 
-// 30-minute reminders disabled — notifications are managed manually in the DB.
-// setInterval(() => {
-//   triggerThirtyMinuteReminders(new Date()).catch(() => {});
-// }, 60000);
+// In-process cron: the backend runs the full job set (reminders, transcription,
+// matching, plus push/campaigns again) every 5 minutes. No external scheduler —
+// when a program ends, pausing this service stops the API and the jobs together.
+const SCHEDULED_JOBS_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(() => {
+  runAllScheduledJobs("interval-5m").catch(() => {
+    // Ignore to keep server alive.
+  });
+}, SCHEDULED_JOBS_INTERVAL_MS);
+setTimeout(() => {
+  runAllScheduledJobs("startup").catch(() => {
+    // Ignore to keep server alive.
+  });
+}, 15000);
 
 app.listen(port, () => {
   // eslint-disable-next-line no-console
