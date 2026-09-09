@@ -64,7 +64,7 @@ export default function MatchCard({ match, onClick }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-      className="w-full rounded-[20px] px-[18px] pt-[16px] pb-[14px]"
+      className="w-full max-w-full box-border rounded-[20px] px-[18px] pt-[16px] pb-[14px]"
       style={{ background: "#2D3852" }}
     >
       <div
