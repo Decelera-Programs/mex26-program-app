@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
 import MatchCard from "../components/MatchCard";
+import MatchIntroModal from "../components/MatchIntroModal";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -92,6 +93,7 @@ export default function Home() {
   const [myOneOnOnesCount, setMyOneOnOnesCount] = useState(0);
   const [todayMatch, setTodayMatch] = useState(null);
   const [pendingMatches, setPendingMatches] = useState([]);
+  const matchAnchorRef = useRef(null);
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [checkinDone, setCheckinDone] = useState(false);
@@ -375,6 +377,15 @@ export default function Home() {
           </div>
         </section>
 
+        <div ref={matchAnchorRef} style={{ scrollMarginTop: 16 }} />
+        {todayMatch ? (
+          <MatchIntroModal
+            match={todayMatch}
+            onSeeDetails={() =>
+              matchAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          />
+        ) : null}
         <AnimatePresence>
         {todayMatch ? (
           <MatchCard match={todayMatch} onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)} />
