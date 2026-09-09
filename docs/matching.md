@@ -21,7 +21,7 @@ per day: a founder already matched today is skipped, and
 | 1 | **Pool** — people with `contact_type in (founder, experience_maker)`, present today (`arrival ≤ today ≤ departure` in `America/Mexico_City`; **both dates required** — a missing bound means not present). Founders need meaningful `expertise_tags` **or** meaningful `startup.challenges`; EMs need meaningful `expertise_tags`. Founders already matched today are dropped. | `loadMatchingPoolForToday` |
 | 2 | **Affinity score** — `score = tagScore + textScore`. **tagScore**: from the founder's 1–2 worst‑rated `challenges.sections` derive `challengeTags` (via `MATCH_SECTION_TO_TAGS`), then `3·(EM tags ∩ challengeTags) + 1·(EM tags ∩ founder tags)`. **textScore**: semantic similarity between the founder's stated need and the EM's profile (see *Semantic scoring* below). Keep `score > 0`. Pairs matched in the last day are excluded here. | `scoreCandidates`, `topChallengeSections`, `loadFounderNeedVectors`, `loadEmOfferVectors` |
 | 3 | **Weight** — `weight = score · emMultiplier(EM) · pairMultiplier(founder,EM)`. `emMultiplier` dampens EMs founders keep rating unhelpful; `pairMultiplier` is the repeated‑pair cooldown. | `loadEmScoreMultipliers`, `loadPairMultipliers` |
-| 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. | `runDailyMatchingJob` step 2 |
+| 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. Then the **quality floor** (`MATCH_MIN_SCORE`) drops any assigned pair whose `score` is too low to be worth a recommendation. | `runDailyMatchingJob` step 2 |
 | 5 | **Brief** — OpenAI (`gpt-4o-mini`) writes `{topic, why[], questions[], opener, em_blurb}` for the already‑chosen pair: what to talk about, why the two fit, 3 concrete questions, a founder ice‑breaker, and an EM‑facing one‑liner. On any failure, a deterministic fallback from shared tags. | `writeMatchTopic`, `fallbackMatchTopic` |
 | 6 | **Persist** — one `Match` row + two `Notification` rows (founder + EM, `message = topic`, linked by `match_id`). Push delivery is handled by the existing `runPushDispatch`. | `runDailyMatchingJob` step 3 |
 | 7 | **Feedback** — `PATCH /matches/:id/feedback` writes back into `match.feedback`; feeds steps 3′ (EM reputation) and 3″ (pair cooldown) on later days. | `PATCH /matches/:id/feedback` |
@@ -38,6 +38,7 @@ never picks the person.
 | `MATCH_WEIGHT_DIRECT_TAG` | `1` | Weight of an EM tag that matches a founder's own expertise tag. In practice founders rarely have `expertise_tags`, so this term is usually 0. |
 | `MATCH_WEIGHT_TEXT` | `8` | Max "tag points" a perfect semantic match contributes. |
 | `MATCH_TEXT_SIM_MIN` / `MATCH_TEXT_SIM_MAX` | `0.15` / `0.55` | Cosine range mapped to `[0, textPoints]`. ≤ MIN → 0; ≥ MAX → full `MATCH_WEIGHT_TEXT`. Calibrate from real `text_score` values in a dry run. |
+| `MATCH_MIN_SCORE` | `2.0` | **Quality floor.** An assigned pair with `score` (tag + text, pre‑multiplier) below this is dropped — the founder gets no match that day (`skipped` reason `below_quality_floor`) rather than a filler recommendation. One challenge‑derived tag hit (3) or a modest semantic signal clears it. Check the `below_quality_floor` count in a dry run before raising/lowering. |
 | `OPENAI_EMBEDDING_MODEL` | env, `text-embedding-3-small` | Model for the semantic term. |
 | `MATCH_CHALLENGE_SEVERITY_THRESHOLD` | `2.5` | A challenge section is "a real problem" at this average rating (1–4). Sections at/above it (top 2) drive the tag mapping; if none qualify, the top 2 by average are used. |
 | `MATCH_CANDIDATE_POOL_SIZE` | `10` | How many candidates are stored in `Match.candidate_pool` (analysis only; no longer limits the assignment). |
@@ -146,7 +147,9 @@ Result shape:
 
 `skipped` reasons: `already_matched_today`, `not_present_today`, `no_presence_dates`
 (missing `arrival_date`/`departure_date`), `no_challenges_or_tags` (all excluded from the
-pool), `no_scoring_overlap`, `all_candidates_at_capacity` (in the pool but unmatched today).
+pool), `no_scoring_overlap`, `all_candidates_at_capacity` (in the pool but unmatched today),
+`below_quality_floor` (was assigned an EM, but `score` < `MATCH_MIN_SCORE` — dropped rather
+than shipped as a generic recommendation).
 
 ## Observability
 
@@ -200,6 +203,7 @@ group by e.full_name order by founders_matched desc;
 | `text_score` always 0 in the dry run | No `OPENAI_API_KEY`, or `expertise_wanted` / EM `tagline`+`bio` are empty. Semantic term is off; matching runs on tags only. |
 | `text_score` dominates / barely moves | Adjust `MATCH_WEIGHT_TEXT`, or `MATCH_TEXT_SIM_MIN`/`MAX` after eyeballing real cosines in a dry run (raw cosine is in `plan[].text_score / MATCH_WEIGHT_TEXT` scaled back). |
 | Topics feel generic | Improve `challenges.deep_dive` / `challenges.sections` data quality, or the system prompt in `writeMatchTopic`. |
+| Lots of `skipped` with `below_quality_floor` | The pool has no good pairings — thin `expertise_wanted` / EM profiles, or a cohort with little overlap. Fix the data; only lower `MATCH_MIN_SCORE` if a weak match really is better than none. |
 | OpenAI down / `source: "fallback"` everywhere | Check `OPENAI_API_KEY`; the fallback text still works, it's just blander. |
 
 ## Schema changes made outside Prisma Migrate

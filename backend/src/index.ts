@@ -96,6 +96,15 @@ const MATCH_WEIGHT_DIRECT_TAG = 1;
 const MATCH_WEIGHT_TEXT = 8;
 const MATCH_TEXT_SIM_MIN = 0.15;
 const MATCH_TEXT_SIM_MAX = 0.55;
+// Quality floor. Minimum fit score (tag overlap + semantic similarity, BEFORE the
+// feedback / cooldown multipliers) for an assigned pair to actually become a match.
+// Below this the greedy assignment only parked two people together to fill a slot —
+// no meaningful tag overlap and negligible semantic similarity — so the founder gets
+// no recommendation that day rather than a generic one (skip reason
+// "below_quality_floor", visible in ?dryRun=1). One challenge-derived tag hit is worth
+// MATCH_WEIGHT_CHALLENGE (3) and a modest semantic signal clears this on its own;
+// raise it to be stricter.
+const MATCH_MIN_SCORE = 2.0;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
 const MATCH_EM_DAILY_CAPACITY_CAP = 4;
 // A challenge section counts as "a real problem" at this average severity.
@@ -1351,6 +1360,16 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
     for (const edge of edges) tryAssign(edge, "global_greedy", capacity);
     for (const edge of edges) tryAssign(edge, "global_fill", capacity + 1);
 
+    // 2b. Quality floor: drop any assigned pair whose fit score (tag + text, no
+    //     multipliers) is below MATCH_MIN_SCORE. Those founders get no match today
+    //     — a "below_quality_floor" skip surfaced in the job result / ?dryRun=1 —
+    //     instead of a filler recommendation the AI would then have to dress up.
+    const flooredFounders = new Set<string>();
+    for (const [founderId, chosen] of assignment) {
+      if (chosen.score < MATCH_MIN_SCORE) flooredFounders.add(founderId);
+    }
+    for (const founderId of flooredFounders) assignment.delete(founderId);
+
     // Skip list: founders excluded from the pool + processed founders with no slot.
     const skipped: MatchSkip[] = [...excludedFounders];
     for (const founder of foundersToProcess) {
@@ -1359,7 +1378,11 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
       skipped.push({
         id: founder.id,
         full_name: founder.full_name,
-        reason: hadCandidates ? "all_candidates_at_capacity" : "no_scoring_overlap",
+        reason: flooredFounders.has(founder.id)
+          ? "below_quality_floor"
+          : hadCandidates
+            ? "all_candidates_at_capacity"
+            : "no_scoring_overlap",
       });
     }
 
