@@ -2279,6 +2279,10 @@ app.get("/matches/me", async (req, res) => {
         ? (match.feedback as Record<string, unknown>)
         : {};
     const myFeedback = feedback[isFounder ? "founder" : "em"] ?? null;
+    const connect =
+      feedback.connect && typeof feedback.connect === "object" && !Array.isArray(feedback.connect)
+        ? (feedback.connect as Record<string, unknown>)
+        : {};
 
     res.json({
       match: {
@@ -2290,6 +2294,7 @@ app.get("/matches/me", async (req, res) => {
         questions: strList(aiRaw.questions),
         em_blurb: str(aiRaw.em_blurb),
         my_feedback: myFeedback,
+        my_connect: connect[isFounder ? "founder" : "em"] ?? null,
         createdAt: match.createdAt,
         role: isFounder ? "founder" : "experience_maker",
         counterpart: {
@@ -2374,6 +2379,93 @@ app.patch("/matches/:id/feedback", async (req, res) => {
     res.json({ ok: true, role, my_feedback: mine });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save feedback" });
+  }
+});
+
+// "Quiero hablar": ping the counterpart with a notification. Idempotent per role.
+app.post("/matches/:id/connect", async (req, res) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const parsedId = z.string().uuid().safeParse(req.params.id);
+  if (!parsedId.success) {
+    res.status(400).json({ error: "Invalid match id" });
+    return;
+  }
+  const person = await resolvePersonFromAuth(auth);
+  if (!person) {
+    res.status(403).json({ error: "No person record linked to this email" });
+    return;
+  }
+
+  try {
+    const match = await prisma.match.findUnique({
+      where: { id: parsedId.data },
+      select: {
+        id: true,
+        founder_id: true,
+        em_id: true,
+        reason_text: true,
+        feedback: true,
+        founder: { select: { full_name: true, startup: { select: { name: true } } } },
+        em: { select: { full_name: true } },
+      },
+    });
+    if (!match) {
+      res.status(404).json({ error: "Match not found" });
+      return;
+    }
+    const role =
+      match.founder_id === person.id ? "founder" : match.em_id === person.id ? "em" : null;
+    if (!role) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const current =
+      match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
+        ? (match.feedback as Record<string, unknown>)
+        : {};
+    const connect =
+      current.connect && typeof current.connect === "object" && !Array.isArray(current.connect)
+        ? (current.connect as Record<string, unknown>)
+        : {};
+    if (connect[role]) {
+      res.json({ ok: true, already: true });
+      return;
+    }
+
+    const targetUserId = role === "founder" ? match.em_id : match.founder_id;
+    const meFirstName = (person.full_name || "Alguien").trim().split(/\s+/)[0];
+    const startupName = match.founder?.startup?.name || "";
+    const startupPart = role === "founder" && startupName ? ` (${startupName})` : "";
+    const topicPart = match.reason_text ? ` sobre: ${match.reason_text}` : "";
+    const message = `${meFirstName}${startupPart} quiere hablar contigo${topicPart}`;
+
+    const at = new Date().toISOString();
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
+        where: { id: match.id },
+        data: {
+          feedback: { ...current, connect: { ...connect, [role]: at } } as Prisma.InputJsonValue,
+        },
+      });
+      await tx.notification.create({
+        data: {
+          id: crypto.randomUUID(),
+          user_id: targetUserId,
+          message,
+          sent_at: new Date(),
+          match_id: match.id,
+        },
+      });
+    });
+
+    res.json({ ok: true, notified: role === "founder" ? match.em?.full_name : match.founder?.full_name });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to send connect ping" });
   }
 });
 

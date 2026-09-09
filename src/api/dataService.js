@@ -315,13 +315,19 @@ export async function getMyTodayMatch() {
   return payload?.match || null;
 }
 
-// payload: { talked: boolean, useful?: boolean|null }
+// payload: { talked: boolean, takeaway?: "idea"|"contact"|"perspective"|"nothing", note?: string }
 export async function submitMatchFeedback(matchId, payload) {
   if (!matchId) return null;
   return api(`/matches/${encodeURIComponent(matchId)}/feedback`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+// Ping the counterpart of a match ("Quiero hablar"). Idempotent per role.
+export async function sendMatchConnect(matchId) {
+  if (!matchId) return null;
+  return api(`/matches/${encodeURIComponent(matchId)}/connect`, { method: "POST" });
 }
 
 export async function getHomeDailyContent(dateKey) {
