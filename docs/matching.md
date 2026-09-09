@@ -22,7 +22,7 @@ per day: a founder already matched today is skipped, and
 | 2 | **Affinity score** — `score = tagScore + textScore`. **tagScore**: from the founder's 1–2 worst‑rated `challenges.sections` derive `challengeTags` (via `MATCH_SECTION_TO_TAGS`), then `3·(EM tags ∩ challengeTags) + 1·(EM tags ∩ founder tags)`. **textScore**: semantic similarity between the founder's stated need and the EM's profile (see *Semantic scoring* below). Keep `score > 0`. Pairs matched in the last day are excluded here. | `scoreCandidates`, `topChallengeSections`, `loadFounderNeedVectors`, `loadEmOfferVectors` |
 | 3 | **Weight** — `weight = score · emMultiplier(EM) · pairMultiplier(founder,EM)`. `emMultiplier` dampens EMs founders keep rating unhelpful; `pairMultiplier` is the repeated‑pair cooldown. | `loadEmScoreMultipliers`, `loadPairMultipliers` |
 | 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. | `runDailyMatchingJob` step 2 |
-| 5 | **Conversation text** — OpenAI (`gpt-4o-mini`) writes `{topic, opener}` for the already‑chosen pair. On any failure, a deterministic fallback from shared tags. | `writeMatchTopic`, `fallbackMatchTopic` |
+| 5 | **Brief** — OpenAI (`gpt-4o-mini`) writes `{topic, why[], questions[], opener, em_blurb}` for the already‑chosen pair: what to talk about, why the two fit, 3 concrete questions, a founder ice‑breaker, and an EM‑facing one‑liner. On any failure, a deterministic fallback from shared tags. | `writeMatchTopic`, `fallbackMatchTopic` |
 | 6 | **Persist** — one `Match` row + two `Notification` rows (founder + EM, `message = topic`, linked by `match_id`). Push delivery is handled by the existing `runPushDispatch`. | `runDailyMatchingJob` step 3 |
 | 7 | **Feedback** — `PATCH /matches/:id/feedback` writes back into `match.feedback`; feeds steps 3′ (EM reputation) and 3″ (pair cooldown) on later days. | `PATCH /matches/:id/feedback` |
 
@@ -102,8 +102,8 @@ mult = 0.4 + 0.6 · (usefulCount / totalCount)      # 0.4×  … 1.0×
 | `candidate_pool` | jsonb | `[{ em_id, score, tag, text }]`, top `MATCH_CANDIDATE_POOL_SIZE` by raw score |
 | `selection_method` | text | `global_greedy` \| `global_fill` |
 | `reason_text` | text | the `topic` (headline shown in the card) |
-| `ai_raw_response` | jsonb null | `{ topic, opener, source: "ai"\|"fallback", prior_matches, score_breakdown: { tag, text } }` |
-| `feedback` | jsonb null | `{ founder?: {talked, useful, at}, em?: {talked, useful, at} }` — added out of band, see below |
+| `ai_raw_response` | jsonb null | The full brief: `{ topic, opener, why: string[], questions: string[], em_blurb, source: "ai"\|"fallback", prior_matches, score_breakdown: { tag, text } }` |
+| `feedback` | jsonb null | `{ founder?: {talked, useful, takeaway, note, at}, em?: {...} }` — `takeaway` ∈ `idea`\|`contact`\|`perspective`\|`nothing`; `useful` is derived from it. Added out of band, see below |
 | `createdat` | timestamptz | |
 
 `useful` is `true` \| `false` \| `null` (null = "we haven't talked yet" or "no
@@ -116,8 +116,8 @@ and `Startup.challenge_embedding`, both `jsonb` `{ hash, model, vector }`.
 
 | Method / path | Auth | Purpose |
 |---|---|---|
-| `GET /matches/me` | Supabase bearer | The caller's match **for today** (or `{ match: null }`). Returns `role`, `counterpart`, `reason_text` (topic), `opener` (founders), `my_feedback`. |
-| `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: boolean, useful?: boolean\|null }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`. |
+| `GET /matches/me` | Supabase bearer | The caller's match **for today** (or `{ match: null }`). Returns `role`, `counterpart`, `reason_text` (topic), `why[]`, `questions[]`, `opener` (for the founder), `em_blurb` (for the EM), `my_feedback`. |
+| `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: boolean, takeaway?: "idea"\|"contact"\|"perspective"\|"nothing", note?: string, useful?: boolean\|null }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`. |
 | `POST /jobs/matching/run?limit=N` | `x-job-key` | Run the job standalone (`N` = 1–200, default 50). |
 | `POST /jobs/matching/run?dryRun=1` | `x-job-key` | **Preview**: runs pool → score → assignment and returns the plan + skip reasons **without writing any `match`/`notification` rows or generating topic text**. (It does resolve embeddings — cheap and cached — so `text_score` in the plan is real.) Use it to sanity-check pairings before a program starts, and to tune. |
 | `POST /jobs/run-all` | `x-job-key` | Runs the full job set once (matching at limit 50, + reminders / campaigns / push / transcription). The backend also fires this set every 5 min in-process. |

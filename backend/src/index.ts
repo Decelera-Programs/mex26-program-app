@@ -134,11 +134,14 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
 // over-long strings are clipped, a missing opener is tolerated, only a missing
 // topic falls back to the deterministic text.
 
-// One tap after a match: "did you talk?" and, if so, "was it useful?".
+// After a match: "did you talk?" and, if so, "what did you take away?".
+// `useful` is derived from `takeaway` (anything but "nothing" -> true) when not sent.
 const matchFeedbackSchema = z
   .object({
     talked: z.boolean(),
     useful: z.boolean().nullable().optional(),
+    takeaway: z.enum(["idea", "contact", "perspective", "nothing"]).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
   })
   .strict();
 
@@ -1016,10 +1019,18 @@ function scoreCandidates(
     .sort((a, b) => b.score - a.score || a.em.id.localeCompare(b.em.id));
 }
 
+type MatchBrief = {
+  topic: string;
+  opener: string;
+  why: string[];
+  questions: string[];
+  em_blurb: string;
+};
+
 async function writeMatchTopic(
   founder: MatchCandidatePerson,
   em: MatchCandidatePerson,
-): Promise<{ topic: string; opener: string }> {
+): Promise<MatchBrief> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured in backend env");
   }
@@ -1056,7 +1067,7 @@ async function writeMatchTopic(
       body: JSON.stringify({
         model: OPENAI_MATCHING_MODEL,
         temperature: 0.4,
-        max_tokens: 500,
+        max_tokens: 800,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -1065,13 +1076,18 @@ async function writeMatchTopic(
               "Eres el asistente de conexiones informales del programa Decelera Mexico 2026. " +
               "Se te da un founder con su reto vivo y un experience maker con el que YA esta emparejado para hoy. " +
               "El founder deberia hablar con el de forma informal (en una pausa o comida, SIN agendar reunion) " +
-              "para una conversacion corta y util. Genera: " +
-              "1) \"topic\": en espanol, maximo 180 caracteres. UN tema concreto y accionable del que hablar, " +
-              "anclado en el reto real del founder y en algo especifico del expertise o la experiencia de ese EM. " +
-              "Nada generico. " +
-              "2) \"opener\": en espanol, maximo 160 caracteres. Una frase en primera persona que el founder pueda " +
-              "decirle literalmente para arrancar la conversacion de forma natural e informal. " +
-              'Responde SOLO un JSON con este formato exacto: {"topic": string, "opener": string}.',
+              "para una conversacion corta y util. Todo en espanol, concreto, nada generico, anclado en el reto " +
+              "real del founder y en algo especifico del expertise o la experiencia de ese EM. Genera: " +
+              "1) \"topic\": max 140 caracteres. UN tema accionable del que hablar. " +
+              "2) \"why\": array de 2 o 3 strings, max 110 caracteres cada uno. Por que tiene sentido esta pareja " +
+              "(cita el reto del founder y algo concreto del EM). " +
+              "3) \"questions\": array de EXACTAMENTE 3 strings, max 130 caracteres cada una. Preguntas concretas " +
+              "que el founder puede hacerle, ancladas en el reto. " +
+              "4) \"opener\": max 150 caracteres. Frase en primera persona que el founder pueda decirle literalmente " +
+              "para arrancar de forma natural e informal. " +
+              "5) \"em_blurb\": max 130 caracteres. Una linea, orientada AL EM, diciendo que quiere el founder de el. " +
+              'Responde SOLO un JSON con este formato exacto: ' +
+              '{"topic": string, "why": string[], "questions": string[], "opener": string, "em_blurb": string}.',
           },
           { role: "user", content: JSON.stringify({ founder: founderContext, experience_maker: emContext }) },
         ],
@@ -1099,20 +1115,29 @@ async function writeMatchTopic(
     throw new Error("OpenAI matching response was not valid JSON");
   }
   const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  const clip = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 400) : "");
+  const clip = (v: unknown, max = 400) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const clipList = (v: unknown, cap: number, max: number) =>
+    Array.isArray(v)
+      ? v.map((item) => clip(item, max)).filter(Boolean).slice(0, cap)
+      : [];
   const topic = clip(obj.topic);
-  const opener = clip(obj.opener);
   if (!topic) {
     throw new Error("OpenAI matching response missing a usable topic");
   }
-  return { topic, opener };
+  return {
+    topic,
+    opener: clip(obj.opener),
+    why: clipList(obj.why, 3, 160),
+    questions: clipList(obj.questions, 3, 200),
+    em_blurb: clip(obj.em_blurb, 200),
+  };
 }
 
-// Used when OpenAI is unavailable: a deterministic topic + opener from tag overlap.
+// Used when OpenAI is unavailable: a deterministic brief from tag overlap.
 function fallbackMatchTopic(
   founder: MatchCandidatePerson,
   em: MatchCandidatePerson,
-): { topic: string; opener: string } {
+): MatchBrief {
   const founderTags = hasMeaningfulExpertiseTags(founder.expertise_tags) ? founder.expertise_tags : [];
   const emTags = hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags : [];
   const challengeTags = tagsFromChallengeSections(founder.startup?.challenges);
@@ -1122,13 +1147,27 @@ function fallbackMatchTopic(
       ...emTags.filter((t) => founderTags.includes(t)),
     ]),
   );
-  const emFirstName = (em.full_name || "").trim().split(/\s+/)[0] || "";
-  const focus = shared[0] || "un reto que tienes ahora mismo";
-  const topic = shared.length > 0
-    ? `Habla con ${emFirstName || "este EM"} sobre ${shared.slice(0, 3).join(", ")}: es su area.`
-    : `Teneis expertise complementario; busca a ${emFirstName || "este EM"} para contrastar tu reto actual.`;
-  const opener = `Hola ${emFirstName}, estoy dandole vueltas a ${focus} y creo que tu has pasado por esto. ¿Tienes un momento en la proxima pausa?`;
-  return { topic, opener };
+  const emFirstName = (em.full_name || "").trim().split(/\s+/)[0] || "este EM";
+  const startupName = founder.startup?.name || "tu startup";
+  const focus = shared.slice(0, 2).join(" y ") || "un reto que tienes ahora mismo";
+  const topic =
+    shared.length > 0
+      ? `Habla con ${emFirstName} sobre ${shared.slice(0, 3).join(", ")}: es su area.`
+      : `Contrasta tu reto actual con ${emFirstName}, tenéis expertise complementario.`;
+  return {
+    topic,
+    opener: `Hola ${emFirstName}, estoy dándole vueltas a ${focus} y creo que tú has pasado por esto. ¿Tienes un momento en la próxima pausa?`,
+    why:
+      shared.length > 0
+        ? [`Solapáis en: ${shared.slice(0, 3).join(", ")}`, `${emFirstName} ya ha trabajado en esa área`]
+        : [`Expertise complementario para tu reto actual`],
+    questions: [
+      `¿Cómo abordaste ${shared[0] || "esto"} en tu experiencia?`,
+      `¿Qué harías distinto si empezaras de cero?`,
+      `¿Con quién más deberíamos hablar sobre esto?`,
+    ],
+    em_blurb: `${(founder.full_name || "Un founder").split(/\s+/)[0]} (${startupName}) quiere tu perspectiva sobre ${focus}.`,
+  };
 }
 
 // Per-EM score multiplier (<= 1) derived from recent founder "useful" ratings.
@@ -1369,16 +1408,15 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
       }
 
       try {
-        let { topic, opener } = fallbackMatchTopic(founder, em);
+        let brief = fallbackMatchTopic(founder, em);
         let topicSource = "fallback";
         try {
-          const written = await writeMatchTopic(founder, em);
-          topic = written.topic;
-          opener = written.opener;
+          brief = await writeMatchTopic(founder, em);
           topicSource = "ai";
         } catch {
-          // Keep the deterministic fallback text.
+          // Keep the deterministic fallback brief.
         }
+        const { topic, opener, why, questions, em_blurb: emBlurb } = brief;
 
         const shortlist = shortlistByFounder.get(founder.id) ?? [];
         const priorMatches = pairPriorCount.get(`${founder.id}:${em.id}`) ?? 0;
@@ -1407,6 +1445,9 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
               ai_raw_response: {
                 topic,
                 opener,
+                why,
+                questions,
+                em_blurb: emBlurb,
                 source: topicSource,
                 prior_matches: priorMatches,
                 score_breakdown: {
@@ -2227,9 +2268,12 @@ app.get("/matches/me", async (req, res) => {
 
     const isFounder = match.founder_id === person.id;
     const counterpart = isFounder ? match.em : match.founder;
-    const aiRaw = (match.ai_raw_response ?? null) as { opener?: unknown } | null;
-    const opener =
-      aiRaw && typeof aiRaw === "object" && typeof aiRaw.opener === "string" ? aiRaw.opener : null;
+    const aiRaw =
+      match.ai_raw_response && typeof match.ai_raw_response === "object" && !Array.isArray(match.ai_raw_response)
+        ? (match.ai_raw_response as Record<string, unknown>)
+        : {};
+    const str = (v: unknown) => (typeof v === "string" ? v : null);
+    const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
     const feedback =
       match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
         ? (match.feedback as Record<string, unknown>)
@@ -2241,7 +2285,10 @@ app.get("/matches/me", async (req, res) => {
         id: match.id,
         match_date: match.match_date,
         reason_text: match.reason_text,
-        opener,
+        opener: str(aiRaw.opener),
+        why: strList(aiRaw.why),
+        questions: strList(aiRaw.questions),
+        em_blurb: str(aiRaw.em_blurb),
         my_feedback: myFeedback,
         createdAt: match.createdAt,
         role: isFounder ? "founder" : "experience_maker",
@@ -2307,9 +2354,14 @@ app.patch("/matches/:id/feedback", async (req, res) => {
       match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
         ? (match.feedback as Record<string, unknown>)
         : {};
+    const { talked, takeaway, note } = parsedBody.data;
+    const usefulFromTakeaway =
+      takeaway === "nothing" ? false : takeaway ? true : parsedBody.data.useful ?? null;
     const mine = {
-      talked: parsedBody.data.talked,
-      useful: parsedBody.data.talked ? parsedBody.data.useful ?? null : null,
+      talked,
+      useful: talked ? usefulFromTakeaway : null,
+      takeaway: talked ? takeaway ?? null : null,
+      note: (note ?? "").trim().slice(0, 500) || null,
       at: new Date().toISOString(),
     };
     const next = { ...current, [role]: mine };
