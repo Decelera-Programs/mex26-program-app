@@ -169,6 +169,14 @@ const MATCH_PAIR_HARD_EXCLUDE_DAYS = 1;
 const MATCH_PAIR_COOLDOWN_DAYS = 3;
 const MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS = 10;
 
+// End-of-day nudge to rate the day's match. runMatchFeedbackReminders only fires
+// once the local hour in MATCHING_TIMEZONE reaches this, and sends at most one
+// reminder per person per match (tracked in match.feedback.reminders).
+const MATCH_FEEDBACK_REMINDER_HOUR = 20;
+// How long a match with no feedback keeps surfacing on /matches/me as a "pending"
+// card, so an evening conversation still gets rated the next morning.
+const MATCH_FEEDBACK_PENDING_DAYS = 2;
+
 const campaignFiltersSchema = z
   .object({
     contact_types: z.array(z.string().min(1)).optional(),
@@ -202,6 +210,19 @@ function dateKeyInTimezone(raw: Date | string | null | undefined, timeZone = AUD
 
 function todayDateKey(timeZone = AUDIENCE_TIMEZONE) {
   return dateKeyInTimezone(new Date(), timeZone) || "";
+}
+
+// Local hour (0-23) in the given timezone. Used to gate end-of-day jobs.
+function hourInTimezone(raw: Date | string | null | undefined = new Date(), timeZone = AUDIENCE_TIMEZONE) {
+  const date = raw ? (raw instanceof Date ? raw : new Date(raw)) : new Date();
+  if (Number.isNaN(date.getTime())) return null;
+  const formatted = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  const n = Number.parseInt(formatted, 10);
+  return Number.isFinite(n) ? ((n % 24) + 24) % 24 : null;
 }
 
 const personSafeSelect = {
@@ -1527,6 +1548,87 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
   }
 }
 
+// End-of-day reminder to rate today's match. Runs from the scheduler every tick
+// but only acts after MATCH_FEEDBACK_REMINDER_HOUR (local), and only once per
+// person per match — the sent timestamp is recorded under feedback.reminders so a
+// later tick (or a restart) doesn't re-notify. One Notification per unrated side;
+// the existing push dispatch delivers it. Never throws.
+async function runMatchFeedbackReminders(now = new Date()) {
+  try {
+    const hour = hourInTimezone(now, MATCHING_TIMEZONE);
+    if (hour === null || hour < MATCH_FEEDBACK_REMINDER_HOUR) {
+      return { ok: true as const, skipped: "before_reminder_hour" as const, hour };
+    }
+
+    const todayKey = todayDateKey(MATCHING_TIMEZONE);
+    const matches = await prisma.match.findMany({
+      where: { match_date: new Date(`${todayKey}T00:00:00.000Z`) },
+      select: {
+        id: true,
+        founder_id: true,
+        em_id: true,
+        feedback: true,
+        founder: { select: { full_name: true } },
+        em: { select: { full_name: true } },
+      },
+    });
+
+    let created = 0;
+    for (const match of matches) {
+      const fb =
+        match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
+          ? (match.feedback as Record<string, unknown>)
+          : {};
+      const reminders =
+        fb.reminders && typeof fb.reminders === "object" && !Array.isArray(fb.reminders)
+          ? (fb.reminders as Record<string, unknown>)
+          : {};
+
+      const sides: Array<{ role: "founder" | "em"; userId: string; counterpart: string }> = [
+        { role: "founder", userId: match.founder_id, counterpart: match.em?.full_name || "tu Experience Maker" },
+        { role: "em", userId: match.em_id, counterpart: match.founder?.full_name || "el founder" },
+      ];
+
+      const patch: Record<string, string> = {};
+      for (const side of sides) {
+        const roleFb = fb[side.role];
+        const answered =
+          roleFb && typeof roleFb === "object" && !Array.isArray(roleFb) && "talked" in (roleFb as object);
+        if (answered || reminders[side.role]) continue;
+
+        const firstName = side.counterpart.trim().split(/\s+/)[0] || side.counterpart;
+        await prisma.notification.create({
+          data: {
+            id: crypto.randomUUID(),
+            user_id: side.userId,
+            message: `¿Hablaste hoy con ${firstName}? Cuéntanos qué tal, son 2 toques.`,
+            sent_at: now,
+            match_id: match.id,
+          },
+        });
+        patch[side.role] = now.toISOString();
+        created += 1;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await prisma.match.update({
+          where: { id: match.id },
+          data: {
+            feedback: { ...fb, reminders: { ...reminders, ...patch } } as Prisma.InputJsonValue,
+          },
+        });
+      }
+    }
+
+    return { ok: true as const, created, checked: matches.length, hour };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Unknown feedback-reminder error",
+    };
+  }
+}
+
 // The full periodic job set. Driven both by POST /jobs/run-all (manual / external
 // cron) and by an in-process interval (see the bottom of this file) — the backend
 // is always up while a program runs, so it schedules its own jobs. Guarded so a
@@ -1554,6 +1656,9 @@ async function runAllScheduledJobs(reason: string) {
     const transcriptions = await safe("transcriptions", () => runOneOnOneTranscriptionJob(20));
     const teamTranscriptions = await safe("teamTranscriptions", () => runTeamNoteTranscriptionJob(20));
     const matching = await safe("matching", () => runDailyMatchingJob(50));
+    const matchFeedbackReminders = await safe("matchFeedbackReminders", () =>
+      runMatchFeedbackReminders(ranAt),
+    );
     return {
       ok: true as const,
       reason,
@@ -1564,6 +1669,7 @@ async function runAllScheduledJobs(reason: string) {
       transcriptions,
       teamTranscriptions,
       matching,
+      matchFeedbackReminders,
     };
   } finally {
     scheduledJobsRunning = false;
@@ -2256,6 +2362,59 @@ app.get("/me", async (req, res) => {
   res.json(person);
 });
 
+type MatchWithParties = Prisma.MatchGetPayload<{
+  include: {
+    founder: { select: typeof personSafeSelect };
+    em: { select: typeof personSafeSelect };
+  };
+}>;
+
+// Shape a Match row for one of its two participants: the counterpart's public
+// info + the brief + this person's own feedback/connect state.
+function serializeMatchForPerson(match: MatchWithParties, personId: string, opts: { stale?: boolean } = {}) {
+  const isFounder = match.founder_id === personId;
+  const counterpart = isFounder ? match.em : match.founder;
+  const aiRaw =
+    match.ai_raw_response && typeof match.ai_raw_response === "object" && !Array.isArray(match.ai_raw_response)
+      ? (match.ai_raw_response as Record<string, unknown>)
+      : {};
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const feedback =
+    match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
+      ? (match.feedback as Record<string, unknown>)
+      : {};
+  const myFeedback = feedback[isFounder ? "founder" : "em"] ?? null;
+  const connect =
+    feedback.connect && typeof feedback.connect === "object" && !Array.isArray(feedback.connect)
+      ? (feedback.connect as Record<string, unknown>)
+      : {};
+
+  return {
+    id: match.id,
+    match_date: match.match_date,
+    reason_text: match.reason_text,
+    opener: str(aiRaw.opener),
+    why: strList(aiRaw.why),
+    questions: strList(aiRaw.questions),
+    em_blurb: str(aiRaw.em_blurb),
+    my_feedback: myFeedback,
+    my_connect: connect[isFounder ? "founder" : "em"] ?? null,
+    stale: opts.stale === true,
+    createdAt: match.createdAt,
+    role: isFounder ? "founder" : "experience_maker",
+    counterpart: {
+      id: counterpart.id,
+      full_name: counterpart.full_name,
+      photo_url: counterpart.photo_url,
+      tagline: counterpart.tagline,
+      contact_type: counterpart.contact_type,
+      company_name: counterpart.company_name,
+      startup: counterpart.startup ? { name: counterpart.startup.name, tagline: counterpart.startup.tagline } : null,
+    },
+  };
+}
+
 app.get("/matches/me", async (req, res) => {
   const auth = (req as AuthenticatedRequest).auth;
   if (!auth?.email || !auth?.sub) {
@@ -2270,66 +2429,43 @@ app.get("/matches/me", async (req, res) => {
   }
 
   try {
-    // Only today's match — the recommendation is per-day and yesterday's is stale.
-    const todayMatchDate = new Date(`${todayDateKey(MATCHING_TIMEZONE)}T00:00:00.000Z`);
-    const match = await prisma.match.findFirst({
+    const todayKey = todayDateKey(MATCHING_TIMEZONE);
+    const todayMatchDate = new Date(`${todayKey}T00:00:00.000Z`);
+    // Look back a few days so an evening conversation can still be rated the next
+    // morning; anything still unrated in that window rides along as `pending`.
+    const pendingSince = new Date(todayMatchDate);
+    pendingSince.setUTCDate(pendingSince.getUTCDate() - MATCH_FEEDBACK_PENDING_DAYS);
+
+    const rows = await prisma.match.findMany({
       where: {
-        match_date: todayMatchDate,
+        match_date: { gte: pendingSince, lte: todayMatchDate },
         OR: [{ founder_id: person.id }, { em_id: person.id }],
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { match_date: "desc" },
       include: {
         founder: { select: personSafeSelect },
         em: { select: personSafeSelect },
       },
     });
 
-    if (!match) {
-      res.json({ match: null });
-      return;
-    }
+    const isToday = (m: MatchWithParties) => m.match_date.getTime() === todayMatchDate.getTime();
+    const hasMyFeedback = (m: MatchWithParties) => {
+      const fb =
+        m.feedback && typeof m.feedback === "object" && !Array.isArray(m.feedback)
+          ? (m.feedback as Record<string, unknown>)
+          : {};
+      const mine = fb[m.founder_id === person.id ? "founder" : "em"];
+      return Boolean(mine && typeof mine === "object" && !Array.isArray(mine) && "talked" in (mine as object));
+    };
 
-    const isFounder = match.founder_id === person.id;
-    const counterpart = isFounder ? match.em : match.founder;
-    const aiRaw =
-      match.ai_raw_response && typeof match.ai_raw_response === "object" && !Array.isArray(match.ai_raw_response)
-        ? (match.ai_raw_response as Record<string, unknown>)
-        : {};
-    const str = (v: unknown) => (typeof v === "string" ? v : null);
-    const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-    const feedback =
-      match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
-        ? (match.feedback as Record<string, unknown>)
-        : {};
-    const myFeedback = feedback[isFounder ? "founder" : "em"] ?? null;
-    const connect =
-      feedback.connect && typeof feedback.connect === "object" && !Array.isArray(feedback.connect)
-        ? (feedback.connect as Record<string, unknown>)
-        : {};
+    const todayRow = rows.find(isToday) ?? null;
+    const pending = rows
+      .filter((m) => !isToday(m) && !hasMyFeedback(m))
+      .map((m) => serializeMatchForPerson(m, person.id, { stale: true }));
 
     res.json({
-      match: {
-        id: match.id,
-        match_date: match.match_date,
-        reason_text: match.reason_text,
-        opener: str(aiRaw.opener),
-        why: strList(aiRaw.why),
-        questions: strList(aiRaw.questions),
-        em_blurb: str(aiRaw.em_blurb),
-        my_feedback: myFeedback,
-        my_connect: connect[isFounder ? "founder" : "em"] ?? null,
-        createdAt: match.createdAt,
-        role: isFounder ? "founder" : "experience_maker",
-        counterpart: {
-          id: counterpart.id,
-          full_name: counterpart.full_name,
-          photo_url: counterpart.photo_url,
-          tagline: counterpart.tagline,
-          contact_type: counterpart.contact_type,
-          company_name: counterpart.company_name,
-          startup: counterpart.startup ? { name: counterpart.startup.name, tagline: counterpart.startup.tagline } : null,
-        },
-      },
+      match: todayRow ? serializeMatchForPerson(todayRow, person.id) : null,
+      pending,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load match";

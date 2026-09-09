@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyTodayMatch, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
+import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
 import MatchCard from "../components/MatchCard";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
@@ -91,6 +91,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState(null);
   const [myOneOnOnesCount, setMyOneOnOnesCount] = useState(0);
   const [todayMatch, setTodayMatch] = useState(null);
+  const [pendingMatches, setPendingMatches] = useState([]);
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [checkinDone, setCheckinDone] = useState(false);
@@ -112,11 +113,12 @@ export default function Home() {
           listPeople().catch(() => []),
           listMyOneOnOnes().catch(() => []),
           getCurrentUser().catch(() => null),
-          getMyTodayMatch().catch(() => null),
+          getMyMatches().catch(() => ({ today: null, pending: [] })),
         ]);
         if (cancelled) return;
         if (userData) setCurrentUser(userData);
-        setTodayMatch(matchData || null);
+        setTodayMatch(matchData?.today || null);
+        setPendingMatches(Array.isArray(matchData?.pending) ? matchData.pending : []);
 
         if (homeData) {
           setHeroContent({
@@ -377,6 +379,14 @@ export default function Home() {
         {todayMatch ? (
           <MatchCard match={todayMatch} onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)} />
         ) : null}
+        {pendingMatches.map((m) => (
+          <MatchCard
+            key={m.id}
+            match={m}
+            stale
+            onClick={() => navigate(`/person/${m.counterpart.id}`)}
+          />
+        ))}
         </AnimatePresence>
 
         <AnimatePresence>

@@ -310,9 +310,14 @@ export async function listEvents() {
   return eventsCache.promise;
 }
 
-export async function getMyTodayMatch() {
+// { today: match | null, pending: match[] } — `pending` are recent matches the
+// user hasn't rated yet, shown as follow-up cards until they give feedback.
+export async function getMyMatches() {
   const payload = await api("/matches/me");
-  return payload?.match || null;
+  return {
+    today: payload?.match || null,
+    pending: Array.isArray(payload?.pending) ? payload.pending : [],
+  };
 }
 
 // payload: { talked: boolean, takeaway?: "idea"|"contact"|"perspective"|"nothing", note?: string }

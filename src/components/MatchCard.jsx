@@ -25,6 +25,17 @@ const TAKEAWAYS = [
   { key: "nothing", label: "Nada", muted: true },
 ];
 
+function dayLabel(raw) {
+  if (!raw) return "";
+  const then = new Date(raw);
+  if (Number.isNaN(then.getTime())) return "";
+  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((startOf(new Date()) - startOf(then)) / 86400000);
+  if (diff <= 0) return "";
+  if (diff === 1) return "ayer";
+  return `hace ${diff} días`;
+}
+
 function ChevronIcon({ dir = "down", color = "#6E7892" }) {
   const d = dir === "up" ? "M18 15l-6-6-6 6" : "M9 18l6-6-6-6";
   return (
@@ -77,7 +88,7 @@ function Avatar({ person, size, radius, fontSize }) {
   );
 }
 
-export default function MatchCard({ match, onClick }) {
+export default function MatchCard({ match, onClick, stale = false }) {
   const [expanded, setExpanded] = useState(false);
   const [fb, setFb] = useState(match?.my_feedback ?? null);
   const [fbStep, setFbStep] = useState("talked"); // talked | takeaway
@@ -137,16 +148,71 @@ export default function MatchCard({ match, onClick }) {
         isFounder && opener ? " · 1 frase para arrancar" : ""
       }`;
 
-  const pill = {
-    background: "rgba(255,255,255,0.1)",
-    border: "1px solid rgba(255,255,255,0.16)",
+  const pillFor = (dark) => ({
+    background: dark ? "rgba(255,255,255,0.1)" : "#F2F8FA",
+    border: dark ? "1px solid rgba(255,255,255,0.16)" : "1px solid #DCE6EC",
     borderRadius: 999,
-    color: "#FFFFFF",
+    color: dark ? "#FFFFFF" : "#2D3852",
     fontSize: 11,
     fontWeight: 600,
     padding: "6px 12px",
     cursor: "pointer",
-  };
+  });
+
+  // Two-step feedback: "did you talk?" -> "what did you take away?". Rendered in
+  // the expanded body (dark) and, for a stale follow-up card, in the collapsed
+  // header strip (light).
+  function renderFeedback(dark) {
+    const pill = pillFor(dark);
+    const labelColor = dark ? "rgba(255,255,255,0.55)" : "#6E7892";
+    if (fb) {
+      return (
+        <span style={{ fontSize: 11, color: dark ? "rgba(255,255,255,0.6)" : "#6E7892" }}>
+          {fb.talked
+            ? fb.takeaway === "nothing"
+              ? "Gracias por el feedback."
+              : "Gracias — nos alegra que sirviera."
+            : "Ok, quizá en otro momento."}
+        </span>
+      );
+    }
+    if (fbStep === "talked") {
+      return (
+        <>
+          <span style={{ fontSize: 11, color: labelColor }}>¿Hablasteis?</span>
+          <button type="button" disabled={busy} style={pill} onClick={() => setFbStep("takeaway")}>
+            Sí
+          </button>
+          <button type="button" disabled={busy} style={pill} onClick={() => sendFeedback({ talked: false })}>
+            Aún no
+          </button>
+        </>
+      );
+    }
+    return (
+      <>
+        <span style={{ fontSize: 11, color: labelColor }}>¿Qué te llevaste?</span>
+        {TAKEAWAYS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            disabled={busy}
+            style={{
+              ...pill,
+              ...(t.muted
+                ? dark
+                  ? { color: "rgba(255,255,255,0.65)", background: "transparent" }
+                  : { color: "#9AA3B8", background: "transparent", border: "1px solid #E4EAF0" }
+                : {}),
+            }}
+            onClick={() => sendFeedback({ talked: true, takeaway: t.key })}
+          >
+            {t.label}
+          </button>
+        ))}
+      </>
+    );
+  }
 
   return (
     <Motion.div
@@ -188,7 +254,9 @@ export default function MatchCard({ match, onClick }) {
                 color: expanded ? "#7FE3F4" : "#0A859B",
               }}
             >
-              Tu conexión de hoy
+              {stale
+                ? `¿Qué tal fue?${dayLabel(match.match_date) ? ` · ${dayLabel(match.match_date)}` : ""}`
+                : "Tu conexión de hoy"}
             </span>
           </div>
           <ChevronIcon dir={expanded ? "up" : "down"} color={expanded ? "rgba(255,255,255,0.5)" : "#6E7892"} />
@@ -228,7 +296,7 @@ export default function MatchCard({ match, onClick }) {
           </div>
         </div>
 
-        {!expanded && (
+        {!expanded && !stale && (
           <div
             style={{
               marginTop: 11,
@@ -243,6 +311,22 @@ export default function MatchCard({ match, onClick }) {
           </div>
         )}
       </button>
+
+      {/* ---------- stale follow-up: ask for feedback right here ---------- */}
+      {stale && !expanded && (
+        <div
+          style={{
+            padding: "12px 16px 14px",
+            borderTop: "1px solid #F0F3F6",
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            flexWrap: "wrap",
+          }}
+        >
+          {renderFeedback(false)}
+        </div>
+      )}
 
       {/* ---------- expanded body ---------- */}
       <AnimatePresence initial={false}>
@@ -454,40 +538,7 @@ export default function MatchCard({ match, onClick }) {
                 flexWrap: "wrap",
               }}
             >
-              {fb ? (
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-                  {fb.talked
-                    ? fb.takeaway === "nothing"
-                      ? "Gracias por el feedback."
-                      : "Gracias — nos alegra que sirviera."
-                    : "Ok, quizá en otro momento."}
-                </span>
-              ) : fbStep === "talked" ? (
-                <>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>¿Hablasteis?</span>
-                  <button type="button" disabled={busy} style={pill} onClick={() => setFbStep("takeaway")}>
-                    Sí
-                  </button>
-                  <button type="button" disabled={busy} style={pill} onClick={() => sendFeedback({ talked: false })}>
-                    Aún no
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>¿Qué te llevaste?</span>
-                  {TAKEAWAYS.map((t) => (
-                    <button
-                      key={t.key}
-                      type="button"
-                      disabled={busy}
-                      style={{ ...pill, ...(t.muted ? { color: "rgba(255,255,255,0.65)", background: "transparent" } : {}) }}
-                      onClick={() => sendFeedback({ talked: true, takeaway: t.key })}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </>
-              )}
+              {renderFeedback(true)}
             </div>
           </Motion.div>
         )}
