@@ -1082,3 +1082,54 @@
 .decelera-breathe-mark {
   animation: decelera-breathe 4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
+
+/* "Needs your attention" treatment: a gentle float + a soft cyan glow behind a
+   card. Applied by <AttentionWrap pulse> only while an action for today is still
+   pending (a fresh match to open, a 1:1 to give feedback on); the wrapper is
+   removed entirely once done, so the card snaps back to normal. */
+@keyframes dc-attn-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes dc-attn-glow {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.68;
+    transform: scale(1.03);
+  }
+}
+.dc-attn {
+  position: relative;
+  z-index: 0;
+  margin-block: 8px;
+  border-radius: 22px;
+  animation: dc-attn-float 3.2s ease-in-out infinite;
+}
+.dc-attn > .dc-attn-glow {
+  position: absolute;
+  inset: -12px -8px -16px -8px;
+  z-index: -1;
+  border-radius: 28px;
+  background: radial-gradient(58% 58% at 50% 45%, rgba(31, 208, 239, 0.6), rgba(31, 208, 239, 0) 72%);
+  filter: blur(16px);
+  pointer-events: none;
+  animation: dc-attn-glow 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-attn {
+    animation: none;
+  }
+  .dc-attn > .dc-attn-glow {
+    animation: none;
+    opacity: 0.42;
+  }
+}

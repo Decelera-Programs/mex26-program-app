@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
+import AttentionWrap from "../components/AttentionWrap";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -42,6 +43,31 @@ const CHECKIN_QUESTIONS = [
   { id: "clarity",    prompt: "How clear does your thinking feel right now?",         kind: "scale", anchors: ["Overwhelmed", "Clear"]     },
   { id: "connection", prompt: "How connected do you feel to the people around you?",  kind: "scale", anchors: ["Isolated",    "Connected"]  },
 ];
+
+// "Needs attention" pulse state, remembered in localStorage so a reload doesn't
+// re-pulse a card the user already dealt with.
+function matchOpened(id) {
+  try {
+    return localStorage.getItem(`decelera.match.${id}.opened`) === "1";
+  } catch {
+    return false;
+  }
+}
+const ONE_ON_ONE_VISIT_KEY = "decelera.oneonones.visited";
+function oneOnOnesVisitedOn(dayKey) {
+  try {
+    return localStorage.getItem(ONE_ON_ONE_VISIT_KEY) === dayKey;
+  } catch {
+    return false;
+  }
+}
+function markOneOnOnesVisited(dayKey) {
+  try {
+    localStorage.setItem(ONE_ON_ONE_VISIT_KEY, dayKey);
+  } catch {
+    /* ignore */
+  }
+}
 
 export default function Home() {
   function parseEventDate(rawDate) {
@@ -93,7 +119,18 @@ export default function Home() {
   const [myOneOnOnesCount, setMyOneOnOnesCount] = useState(0);
   const [todayMatch, setTodayMatch] = useState(null);
   const [pendingMatches, setPendingMatches] = useState([]);
+  const [engagedMatchIds, setEngagedMatchIds] = useState(() => new Set());
+  const [oneOnOneVisitedToday, setOneOnOneVisitedToday] = useState(() => oneOnOnesVisitedOn(getTodayKey()));
   const matchAnchorRef = useRef(null);
+
+  const markMatchEngaged = (id) => {
+    setEngagedMatchIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [checkinDone, setCheckinDone] = useState(false);
@@ -119,8 +156,15 @@ export default function Home() {
         ]);
         if (cancelled) return;
         if (userData) setCurrentUser(userData);
-        setTodayMatch(matchData?.today || null);
-        setPendingMatches(Array.isArray(matchData?.pending) ? matchData.pending : []);
+        const nextToday = matchData?.today || null;
+        const nextPending = Array.isArray(matchData?.pending) ? matchData.pending : [];
+        setTodayMatch(nextToday);
+        setPendingMatches(nextPending);
+        const seededEngaged = new Set();
+        for (const m of [nextToday, ...nextPending]) {
+          if (m?.id && (m.my_feedback || matchOpened(m.id))) seededEngaged.add(m.id);
+        }
+        setEngagedMatchIds(seededEngaged);
 
         if (homeData) {
           setHeroContent({
@@ -388,20 +432,35 @@ export default function Home() {
         ) : null}
         <AnimatePresence>
         {todayMatch ? (
-          <MatchCard match={todayMatch} onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)} />
+          <AttentionWrap
+            key={`wrap-${todayMatch.id}`}
+            pulse={!engagedMatchIds.has(todayMatch.id)}
+          >
+            <MatchCard
+              match={todayMatch}
+              onEngaged={markMatchEngaged}
+              onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)}
+            />
+          </AttentionWrap>
         ) : null}
         {pendingMatches.map((m) => (
-          <MatchCard
-            key={m.id}
-            match={m}
-            stale
-            onClick={() => navigate(`/person/${m.counterpart.id}`)}
-          />
+          <AttentionWrap key={`wrap-${m.id}`} pulse={!engagedMatchIds.has(m.id) && !m.my_feedback}>
+            <MatchCard
+              match={m}
+              stale
+              onEngaged={markMatchEngaged}
+              onClick={() => navigate(`/person/${m.counterpart.id}`)}
+            />
+          </AttentionWrap>
         ))}
         </AnimatePresence>
 
         <AnimatePresence>
         {myOneOnOnesCount > 0 ? (
+          <AttentionWrap
+            key="one-on-ones-wrap"
+            pulse={myOneOnOnesWithoutAudio > 0 && !oneOnOneVisitedToday}
+          >
           <Motion.button
             key="one-on-ones-card"
             initial={{ opacity: 0, y: 14 }}
@@ -409,7 +468,12 @@ export default function Home() {
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
             type="button"
-            onClick={() => navigate("/one-on-ones")}
+            onClick={() => {
+              const dayKey = getTodayKey();
+              markOneOnOnesVisited(dayKey);
+              setOneOnOneVisitedToday(true);
+              navigate("/one-on-ones");
+            }}
             className="w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[14px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.25)]"
             style={{ background: "#2D3852", border: "none" }}
           >
@@ -439,6 +503,7 @@ export default function Home() {
               </div>
             ) : null}
           </Motion.button>
+          </AttentionWrap>
         ) : null}
         </AnimatePresence>
 

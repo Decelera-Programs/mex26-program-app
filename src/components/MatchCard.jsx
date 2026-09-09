@@ -88,7 +88,15 @@ function Avatar({ person, size, radius, fontSize }) {
   );
 }
 
-export default function MatchCard({ match, onClick, stale = false }) {
+function markOpened(matchId) {
+  try {
+    localStorage.setItem(`decelera.match.${matchId}.opened`, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export default function MatchCard({ match, onClick, stale = false, onEngaged }) {
   const [expanded, setExpanded] = useState(false);
   const [fb, setFb] = useState(match?.my_feedback ?? null);
   const [fbStep, setFbStep] = useState("talked"); // talked | takeaway
@@ -119,7 +127,19 @@ export default function MatchCard({ match, onClick, stale = false }) {
     });
   }
 
+  // The user has acted on this card today — stop any "needs attention" pulse.
+  function engage() {
+    markOpened(match.id);
+    onEngaged?.(match.id);
+  }
+
+  function toggleExpanded() {
+    if (!expanded) engage();
+    setExpanded((v) => !v);
+  }
+
   async function sendFeedback(payload) {
+    engage();
     setBusy(true);
     try {
       const res = await submitMatchFeedback(match.id, payload);
@@ -132,6 +152,7 @@ export default function MatchCard({ match, onClick, stale = false }) {
   }
 
   async function connect() {
+    engage();
     setConnectSent(true);
     try {
       await sendMatchConnect(match.id);
@@ -233,7 +254,7 @@ export default function MatchCard({ match, onClick, stale = false }) {
       {/* ---------- header (collapsed summary / expanded band) ---------- */}
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggleExpanded}
         className="w-full text-left"
         style={{
           border: "none",
