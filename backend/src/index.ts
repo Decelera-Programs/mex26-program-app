@@ -771,12 +771,18 @@ async function loadMatchingPoolForToday() {
     },
   });
 
+  // Both bounds are required: a missing arrival/departure means we don't know
+  // whether the person is on site, so they are NOT matched. (A null bound used to
+  // be treated as "unbounded", which kept people with incomplete dates in the
+  // pool forever.)
   const presentIds = new Set(
     people
       .filter((p) => {
         const arrivalKey = dateKeyInTimezone(p.arrival_date, MATCHING_TIMEZONE);
         const departureKey = dateKeyInTimezone(p.departure_date, MATCHING_TIMEZONE);
-        return (!arrivalKey || arrivalKey <= todayKey) && (!departureKey || departureKey >= todayKey);
+        return Boolean(
+          arrivalKey && departureKey && arrivalKey <= todayKey && departureKey >= todayKey,
+        );
       })
       .map((p) => p.id),
   );
@@ -797,7 +803,9 @@ async function loadMatchingPoolForToday() {
     if (alreadyMatchedToday.has(p.id)) {
       excludedFounders.push({ id: p.id, full_name: p.full_name, reason: "already_matched_today" });
     } else if (!presentIds.has(p.id)) {
-      excludedFounders.push({ id: p.id, full_name: p.full_name, reason: "not_present_today" });
+      const reason =
+        p.arrival_date && p.departure_date ? "not_present_today" : "no_presence_dates";
+      excludedFounders.push({ id: p.id, full_name: p.full_name, reason });
     } else if (
       !hasMeaningfulExpertiseTags(p.expertise_tags) &&
       !hasMeaningfulChallenges(p.startup?.challenges)

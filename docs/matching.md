@@ -18,7 +18,7 @@ per day: a founder already matched today is skipped, and
 
 | # | Step | Function |
 |---|---|---|
-| 1 | **Pool** — people with `contact_type in (founder, experience_maker)`, present today (arrival ≤ today ≤ departure, in `America/Mexico_City`). Founders need meaningful `expertise_tags` **or** meaningful `startup.challenges`; EMs need meaningful `expertise_tags`. Founders already matched today are dropped. | `loadMatchingPoolForToday` |
+| 1 | **Pool** — people with `contact_type in (founder, experience_maker)`, present today (`arrival ≤ today ≤ departure` in `America/Mexico_City`; **both dates required** — a missing bound means not present). Founders need meaningful `expertise_tags` **or** meaningful `startup.challenges`; EMs need meaningful `expertise_tags`. Founders already matched today are dropped. | `loadMatchingPoolForToday` |
 | 2 | **Affinity score** — `score = tagScore + textScore`. **tagScore**: from the founder's 1–2 worst‑rated `challenges.sections` derive `challengeTags` (via `MATCH_SECTION_TO_TAGS`), then `3·(EM tags ∩ challengeTags) + 1·(EM tags ∩ founder tags)`. **textScore**: semantic similarity between the founder's stated need and the EM's profile (see *Semantic scoring* below). Keep `score > 0`. Pairs matched in the last day are excluded here. | `scoreCandidates`, `topChallengeSections`, `loadFounderNeedVectors`, `loadEmOfferVectors` |
 | 3 | **Weight** — `weight = score · emMultiplier(EM) · pairMultiplier(founder,EM)`. `emMultiplier` dampens EMs founders keep rating unhelpful; `pairMultiplier` is the repeated‑pair cooldown. | `loadEmScoreMultipliers`, `loadPairMultipliers` |
 | 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. | `runDailyMatchingJob` step 2 |
@@ -144,9 +144,9 @@ Result shape:
 }
 ```
 
-`skipped` reasons: `already_matched_today`, `not_present_today`, `no_challenges_or_tags`
-(excluded from the pool), `no_scoring_overlap`, `all_candidates_at_capacity` (in the pool
-but unmatched today).
+`skipped` reasons: `already_matched_today`, `not_present_today`, `no_presence_dates`
+(missing `arrival_date`/`departure_date`), `no_challenges_or_tags` (all excluded from the
+pool), `no_scoring_overlap`, `all_candidates_at_capacity` (in the pool but unmatched today).
 
 ## Observability
 
