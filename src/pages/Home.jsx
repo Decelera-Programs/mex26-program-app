@@ -5,7 +5,7 @@ import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
 import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
 
 // TODO: set the real Decelera México 2026 start date.
@@ -121,7 +121,10 @@ export default function Home() {
   const [pendingMatches, setPendingMatches] = useState([]);
   const [engagedMatchIds, setEngagedMatchIds] = useState(() => new Set());
   const [oneOnOneVisitedToday, setOneOnOneVisitedToday] = useState(() => oneOnOnesVisitedOn(getTodayKey()));
+  const [highlightMatchId, setHighlightMatchId] = useState(null);
+  const [cameFromMatchLink, setCameFromMatchLink] = useState(false);
   const matchAnchorRef = useRef(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const markMatchEngaged = (id) => {
     setEngagedMatchIds((prev) => {
@@ -229,6 +232,35 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  // Arrived from a match notification (?match=<id>): remember which card to
+  // reveal, then drop the param so a refresh doesn't re-trigger.
+  useEffect(() => {
+    const wanted = searchParams.get("match");
+    if (!wanted) return;
+    setCameFromMatchLink(true);
+    setHighlightMatchId(wanted);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("match");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
+  // Once the highlighted match card is actually in the DOM, scroll it into view.
+  useEffect(() => {
+    if (!highlightMatchId) return undefined;
+    const present =
+      todayMatch?.id === highlightMatchId || pendingMatches.some((m) => m.id === highlightMatchId);
+    if (!present) return undefined;
+    const t = setTimeout(() => {
+      matchAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 220);
+    return () => clearTimeout(t);
+  }, [highlightMatchId, todayMatch, pendingMatches]);
 
   useEffect(() => {
     if (!checkinOpen) return;
@@ -422,7 +454,7 @@ export default function Home() {
         </section>
 
         <div ref={matchAnchorRef} style={{ scrollMarginTop: 16 }} />
-        {todayMatch ? (
+        {todayMatch && !cameFromMatchLink ? (
           <MatchIntroModal
             match={todayMatch}
             onSeeDetails={() =>
@@ -438,6 +470,7 @@ export default function Home() {
           >
             <MatchCard
               match={todayMatch}
+              highlight={highlightMatchId === todayMatch.id}
               onEngaged={markMatchEngaged}
               onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)}
             />
@@ -448,6 +481,7 @@ export default function Home() {
             <MatchCard
               match={m}
               stale
+              highlight={highlightMatchId === m.id}
               onEngaged={markMatchEngaged}
               onClick={() => navigate(`/person/${m.counterpart.id}`)}
             />

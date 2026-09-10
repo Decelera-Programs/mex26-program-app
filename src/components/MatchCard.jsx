@@ -96,7 +96,7 @@ function markOpened(matchId) {
   }
 }
 
-export default function MatchCard({ match, onClick, stale = false, onEngaged }) {
+export default function MatchCard({ match, onClick, stale = false, onEngaged, highlight = false }) {
   const [expanded, setExpanded] = useState(false);
   const [fb, setFb] = useState(match?.my_feedback ?? null);
   const [fbStep, setFbStep] = useState("talked"); // talked | takeaway
@@ -111,6 +111,13 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged }) 
     setConnectSent(Boolean(match?.my_connect));
     setChecked(loadChecked(match?.id));
   }, [match?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Opened straight from a match notification — show the whole brief.
+  useEffect(() => {
+    if (!highlight) return;
+    setExpanded(true);
+    engage();
+  }, [highlight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match?.counterpart) return null;
 
@@ -129,6 +136,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged }) 
 
   // The user has acted on this card today — stop any "needs attention" pulse.
   function engage() {
+    if (!match?.id) return;
     markOpened(match.id);
     onEngaged?.(match.id);
   }

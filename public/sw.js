@@ -1,7 +1,7 @@
 /* Simple service worker for offline support.
    This is intentionally minimal and backend-free. */
 
-const CACHE_NAME = "decelera-mx-pwa-v1";
+const CACHE_NAME = "decelera-mx-pwa-v2";
 
 // Core shell files. Vite will fingerprint JS/CSS, so we cache navigation + static assets.
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.ico"];
@@ -69,9 +69,17 @@ self.addEventListener("push", (event) => {
   const body = payload.body || "You have a new notification";
   const eventId = payload.eventId || null;
   const personId = payload.personId || null;
+  const matchId = payload.matchId || null;
   const notificationId = payload.notificationId || null;
-  const baseUrl = eventId ? `/event/${eventId}` : personId ? `/person/${personId}` : "/notifications";
-  const targetUrl = notificationId ? `${baseUrl}?notif=${notificationId}` : baseUrl;
+  let targetUrl;
+  if (matchId) {
+    // Match notifications land on Home, which scrolls to / opens the match card.
+    targetUrl = `/?match=${encodeURIComponent(matchId)}`;
+    if (notificationId) targetUrl += `&notif=${encodeURIComponent(notificationId)}`;
+  } else {
+    const baseUrl = eventId ? `/event/${eventId}` : personId ? `/person/${personId}` : "/notifications";
+    targetUrl = notificationId ? `${baseUrl}?notif=${notificationId}` : baseUrl;
+  }
   event.waitUntil(
     self.registration.showNotification(title, {
       body,

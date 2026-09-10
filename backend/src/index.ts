@@ -176,6 +176,9 @@ const MATCH_FEEDBACK_REMINDER_HOUR = 20;
 // How long a match with no feedback keeps surfacing on /matches/me as a "pending"
 // card, so an evening conversation still gets rated the next morning.
 const MATCH_FEEDBACK_PENDING_DAYS = 2;
+// Push/notification copy for a fresh daily match. Deliberately a teaser — the
+// details (counterpart, topic, questions) live on the card the user opens.
+const MATCH_NOTIFICATION_TEXT = "Tenemos una sugerencia que te podría interesar!!";
 
 const campaignFiltersSchema = z
   .object({
@@ -344,7 +347,6 @@ async function dispatchDuePushNotifications(now = new Date()) {
         include: { campaign: { select: { title: true } } },
         take: 1,
       },
-      match: { select: { founder_id: true, em_id: true } },
     },
     take: 100,
     orderBy: { sent_at: "asc" },
@@ -361,16 +363,13 @@ async function dispatchDuePushNotifications(now = new Date()) {
       notificationsWithSubscriptions += 1;
     }
     const campaignTitle = notification.campaignRecipients?.[0]?.campaign?.title;
-    const counterpartId = notification.match
-      ? notification.match.founder_id === notification.user_id
-        ? notification.match.em_id
-        : notification.match.founder_id
-      : null;
     const payload = JSON.stringify({
       title: campaignTitle || "Decelera México",
       body: notification.message,
       eventId: notification.event_id ?? null,
-      personId: counterpartId,
+      // Any match-linked notification (daily match, "quiero hablar" ping,
+      // feedback reminder) opens Home and surfaces the match card.
+      matchId: notification.match_id ?? null,
       notificationId: notification.id,
       sentAt: notification.sent_at,
     });
@@ -1506,14 +1505,14 @@ async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) 
               {
                 id: crypto.randomUUID(),
                 user_id: founder.id,
-                message: topic,
+                message: MATCH_NOTIFICATION_TEXT,
                 sent_at: new Date(),
                 match_id: createdMatch.id,
               },
               {
                 id: crypto.randomUUID(),
                 user_id: em.id,
-                message: topic,
+                message: MATCH_NOTIFICATION_TEXT,
                 sent_at: new Date(),
                 match_id: createdMatch.id,
               },
