@@ -49,28 +49,34 @@ never picks the person.
 | `MATCH_FEEDBACK_MIN_MULTIPLIER` | `0.4` | Floor of the EM multiplier (rate 0 → `0.4×`, rate 1 → `1.0×`). |
 | `MATCH_PAIR_HARD_EXCLUDE_DAYS` | `1` | A pair matched within this many days is not a candidate today. |
 | `MATCH_PAIR_COOLDOWN_DAYS` | `3` | Days for a repeated pair's multiplier to ramp back to `1.0×` (no / neutral feedback). |
-| `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` | `10` | Same, when the founder last rated that pair `useful: false` — effectively "not again this program". |
+| `MATCH_PAIR_COOLDOWN_WONT_DAYS` | `7` | Same, when the founder said `talked: "wont"` (real signal, but not a quality rejection). |
+| `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` | `10` | Same, when the founder rated that pair `meh` — effectively "not again this program". |
 | `MATCH_FEEDBACK_REMINDER_HOUR` | `20` | Local hour (`MATCHING_TIMEZONE`) from which `runMatchFeedbackReminders` sends the end-of-day "rate your match" push. |
 | `MATCH_FEEDBACK_PENDING_DAYS` | `2` | How many days an unrated match keeps riding along on `/matches/me` as a `pending` card. |
 | `OPENAI_MATCHING_MODEL` | env, `gpt-4o-mini` | Model for `writeMatchTopic`. |
 
 ### Multiplier curves
 
-**EM reputation** (`loadEmScoreMultipliers`) — from `feedback.founder.useful` on
-the EM's matches in the last `LOOKBACK_DAYS`, once there are `≥ MIN_SAMPLES`:
+**EM reputation** (`loadEmScoreMultipliers`) — from the founder's `rating` on
+the EM's matches in the last `LOOKBACK_DAYS`, once there are `≥ MIN_SAMPLES`.
+Each rated match scores `great → 1`, `good → 0.6`, `meh → 0` (a pre‑rating row
+with only the old boolean `useful` scores `0.8`/`0`):
 
 ```
-mult = 0.4 + 0.6 · (usefulCount / totalCount)      # 0.4×  … 1.0×
+mult = 0.4 + 0.6 · (Σscore / totalCount)      # 0.4×  … 1.0×
 ```
 
-**Repeated pair** (`loadPairMultipliers`) — from the pair's most recent prior match:
+**Repeated pair** (`loadPairMultipliers`) — from the pair's most recent prior match.
+`useful` here is derived from `rating` (`great`/`good` → true, `meh` → false),
+falling back to the legacy boolean field on older rows:
 
 | Last match… | Multiplier |
 |---|---|
 | ≤ 1 day ago | pair is hard‑excluded from today |
-| rated `useful: true` | `1.0×` (no penalty — competes on raw affinity, i.e. depth is allowed) |
-| rated `useful: false` | `min(1, daysAgo / 10)` |
-| no / other feedback | `min(1, daysAgo / 3)` |
+| `useful: true` (rated `great`/`good`) | `1.0×` (no penalty — competes on raw affinity, i.e. depth is allowed) |
+| `useful: false` (rated `meh`) | `min(1, daysAgo / 10)` |
+| `talked: "wont"` | `min(1, daysAgo / 7)` |
+| no / other feedback (incl. `not_yet`) | `min(1, daysAgo / 3)` |
 
 ### Semantic scoring
 
@@ -107,11 +113,18 @@ mult = 0.4 + 0.6 · (usefulCount / totalCount)      # 0.4×  … 1.0×
 | `selection_method` | text | `global_greedy` \| `global_fill` |
 | `reason_text` | text | the `topic` (headline shown in the card) |
 | `ai_raw_response` | jsonb null | The full brief: `{ topic, opener, why: string[], questions: string[], em_blurb, source: "ai"\|"fallback", prior_matches, score_breakdown: { tag, text } }` |
-| `feedback` | jsonb null | `{ founder?: {talked, useful, takeaway, note, at}, em?: {...}, connect?: {founder?, em?}, reminders?: {founder?, em?} }` — `takeaway` ∈ `idea`\|`contact`\|`perspective`\|`nothing`; `useful` is derived from it. `connect` = "Quiero hablar" timestamps; `reminders` = when the end-of-day feedback push was sent to that side. Added out of band, see below |
+| `feedback` | jsonb null | `{ founder?: {talked, rating, useful, takeaway, note, at}, em?: {...}, connect?: {founder?, em?}, reminders?: {founder?, em?} }` — `connect` = "Quiero hablar" timestamps; `reminders` = when the end-of-day feedback push was sent to that side. Added out of band, see below |
 | `createdat` | timestamptz | |
 
-`useful` is `true` \| `false` \| `null` (null = "we haven't talked yet" or "no
-opinion"). `at` is an ISO timestamp.
+Per‑role feedback shape:
+
+| Field | Values | Notes |
+|---|---|---|
+| `talked` | `"yes"` \| `"not_yet"` \| `"wont"` | `"not_yet"` ("ask me later") is **never persisted** by the client — only `"yes"`/`"wont"` reach the API, so the prompt keeps re‑asking rather than freezing on a stale answer. A match counts as "settled" (stops nudging, drops off `pending`) only once `talked` is `"yes"` or `"wont"`. |
+| `rating` | `"great"` \| `"good"` \| `"meh"` \| `null` | Only set when `talked: "yes"`. |
+| `useful` | `true` \| `false` \| `null` | **Derived**, not user‑entered: `rating` great/good → `true`, meh → `false`, otherwise `null`. Kept for `loadEmScoreMultipliers` / `loadPairMultipliers`, which also fall back to this field on pre‑rating rows that only ever set it directly. |
+| `takeaway` | `"idea"` \| `"contact"` \| `"perspective"` \| `"collab"` \| `null` | Optional, offered only after a `great`/`good` rating; skippable. |
+| `note`, `at` | — | Unchanged. |
 
 Semantic-scoring cache columns (also added out of band, see below): `Person.embedding`
 and `Startup.challenge_embedding`, both `jsonb` `{ hash, model, vector }`.
@@ -121,7 +134,7 @@ and `Startup.challenge_embedding`, both `jsonb` `{ hash, model, vector }`.
 | Method / path | Auth | Purpose |
 |---|---|---|
 | `GET /matches/me` | Supabase bearer | `{ match, pending[] }`. `match` = today's (or `null`); `pending` = the caller's matches from the last `MATCH_FEEDBACK_PENDING_DAYS` days they haven't rated (`stale: true`). Each carries `role`, `counterpart`, `reason_text` (topic), `why[]`, `questions[]`, `opener` (founder), `em_blurb` (EM), `my_feedback`, `my_connect`. |
-| `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: boolean, takeaway?: "idea"\|"contact"\|"perspective"\|"nothing", note?: string, useful?: boolean\|null }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`. |
+| `PATCH /matches/:id/feedback` | Supabase bearer | Body `{ talked: "yes"\|"not_yet"\|"wont", rating?: "great"\|"good"\|"meh", takeaway?: "idea"\|"contact"\|"perspective"\|"collab", note?: string }`. Caller must be the founder or EM of that match. Merges into `match.feedback[role]`; `useful` is derived server‑side from `rating`. |
 | `POST /jobs/matching/run?limit=N` | `x-job-key` | Run the job standalone (`N` = 1–200, default 50). |
 | `POST /jobs/matching/run?dryRun=1` | `x-job-key` | **Preview**: runs pool → score → assignment and returns the plan + skip reasons **without writing any `match`/`notification` rows or generating topic text**. (It does resolve embeddings — cheap and cached — so `text_score` in the plan is real.) Use it to sanity-check pairings before a program starts, and to tune. |
 | `POST /jobs/run-all` | `x-job-key` | Runs the full job set once (matching at limit 50, + reminders / campaigns / push / transcription / **match feedback reminders**). The backend also fires this set every 5 min in-process. |
@@ -201,7 +214,7 @@ group by e.full_name order by founders_matched desc;
 |---|---|
 | EMs report being swamped | Lower `MATCH_EM_DAILY_CAPACITY_CAP` (e.g. `3`). |
 | Founders keep getting matched to the same few EMs | Shorten `MATCH_PAIR_COOLDOWN_DAYS` so more EMs stay eligible — or (better) check whether the tag data / `MATCH_SECTION_TO_TAGS` is too narrow. |
-| A bad match keeps coming back | Confirm the founder submitted `useful: false`; `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` (10) should hold it for the rest of a normal program. |
+| A bad match keeps coming back | Confirm the founder rated it `meh`; `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` (10) should hold it for the rest of a normal program. |
 | Lots of `skipped` with `no_challenges_or_tags` / `no_scoring_overlap` | Pool too thin — usually missing `expertise_tags` on EMs or missing `challenges` on startups. Check the data, not the algorithm. |
 | `text_score` always 0 in the dry run | No `OPENAI_API_KEY`, or `expertise_wanted` / EM `tagline`+`bio` are empty. Semantic term is off; matching runs on tags only. |
 | `text_score` dominates / barely moves | Adjust `MATCH_WEIGHT_TEXT`, or `MATCH_TEXT_SIM_MIN`/`MAX` after eyeballing real cosines in a dry run (raw cosine is in `plan[].text_score / MATCH_WEIGHT_TEXT` scaled back). |
@@ -236,8 +249,6 @@ alter table public."Startup" add column if not exists challenge_embedding jsonb;
 
 - **No coordination with the curated 1:1 event** (`OneOnOne`). The daily match can
   suggest a pair that already has a hand-scheduled 1:1. Deliberately deferred.
-- Feedback questions show for both roles; "was it useful?" reads slightly oddly
-  for an EM.
 - EM reputation is global (aggregated across founders), because a given
   founder↔EM pair is rarely repeated within one program.
 - `MATCH_TEXT_SIM_MIN`/`MAX` and `MATCH_WEIGHT_TEXT` are seeded, not tuned — no

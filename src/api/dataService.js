@@ -320,7 +320,7 @@ export async function getMyMatches() {
   };
 }
 
-// payload: { talked: boolean, takeaway?: "idea"|"contact"|"perspective"|"nothing", note?: string }
+// payload: { talked: "yes"|"not_yet"|"wont", rating?: "great"|"good"|"meh", takeaway?: "idea"|"contact"|"perspective"|"collab", note?: string }
 export async function submitMatchFeedback(matchId, payload) {
   if (!matchId) return null;
   return api(`/matches/${encodeURIComponent(matchId)}/feedback`, {

@@ -3,27 +3,17 @@ import { motion as Motion, AnimatePresence } from "framer-motion";
 import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
 import { resolvePhotoUrl } from "../lib/photoUrl";
 
-function loadChecked(matchId) {
-  try {
-    const raw = localStorage.getItem(`decelera.match.${matchId}.q`);
-    return new Set(raw ? JSON.parse(raw) : []);
-  } catch {
-    return new Set();
-  }
-}
-function saveChecked(matchId, set) {
-  try {
-    localStorage.setItem(`decelera.match.${matchId}.q`, JSON.stringify([...set]));
-  } catch {
-    /* ignore */
-  }
-}
+const RATINGS = [
+  { key: "great", emoji: "🔥", label: "Muy útil" },
+  { key: "good", emoji: "👍", label: "Estuvo bien" },
+  { key: "meh", emoji: "😐", label: "No aportó" },
+];
 
 const TAKEAWAYS = [
   { key: "idea", label: "Una idea" },
   { key: "contact", label: "Un contacto" },
   { key: "perspective", label: "Otra perspectiva" },
-  { key: "nothing", label: "Nada", muted: true },
+  { key: "collab", label: "Posible colaboración" },
 ];
 
 function dayLabel(raw) {
@@ -101,17 +91,19 @@ function markOpened(matchId) {
 export default function MatchCard({ match, onClick, stale = false, onEngaged, highlight = false }) {
   const [expanded, setExpanded] = useState(false);
   const [fb, setFb] = useState(match?.my_feedback ?? null);
-  const [fbStep, setFbStep] = useState("talked"); // talked | takeaway
+  const [fbStep, setFbStep] = useState("talked"); // talked | rating | takeaway
+  const [pendingRating, setPendingRating] = useState(null);
+  const [dismissed, setDismissed] = useState(false); // "Todavía no" — soft, not persisted
   const [connectSent, setConnectSent] = useState(Boolean(match?.my_connect));
-  const [checked, setChecked] = useState(() => loadChecked(match?.id));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setExpanded(false);
     setFb(match?.my_feedback ?? null);
     setFbStep("talked");
+    setPendingRating(null);
+    setDismissed(false);
     setConnectSent(Boolean(match?.my_connect));
-    setChecked(loadChecked(match?.id));
   }, [match?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened straight from a match notification — show the whole brief.
@@ -125,16 +117,8 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
 
   const { counterpart, reason_text: topic, opener, why = [], questions = [], em_blurb: emBlurb, role } = match;
   const isFounder = role === "founder";
-
-  function toggleQuestion(i) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      saveChecked(match.id, next);
-      return next;
-    });
-  }
+  // "yes"/"wont" are a real answer; "not_yet" is never persisted (see below).
+  const settled = fb?.talked === "yes" || fb?.talked === "wont" || fb?.talked === true;
 
   // The user has acted on this card today — stop any "needs attention" pulse.
   function engage() {
@@ -156,6 +140,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
       setFb(res?.my_feedback ?? payload);
     } catch {
       setFbStep("talked");
+      setPendingRating(null);
     } finally {
       setBusy(false);
     }
@@ -171,77 +156,177 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
     }
   }
 
-  const metaLine = fb
-    ? fb.talked
-      ? "Feedback enviado · gracias"
-      : "Marcaste: aún no habéis hablado"
+  const metaLine = settled
+    ? "Feedback enviado · gracias"
     : `${questions.length} pregunta${questions.length === 1 ? "" : "s"} lista${questions.length === 1 ? "" : "s"}${
         isFounder && opener ? " · 1 frase para arrancar" : ""
       }`;
 
-  const pillFor = (dark) => ({
-    background: dark ? "rgba(255,255,255,0.1)" : "#F2F8FA",
-    border: dark ? "1px solid rgba(255,255,255,0.16)" : "1px solid #DCE6EC",
-    borderRadius: 999,
-    color: dark ? "#FFFFFF" : "#2D3852",
-    fontSize: 11,
-    fontWeight: 600,
-    padding: "6px 12px",
-    cursor: "pointer",
-  });
-
-  // Two-step feedback: "did you talk?" -> "what did you take away?". Rendered in
-  // the expanded body (dark) and, for a stale follow-up card, in the collapsed
-  // header strip (light).
+  // Three-step feedback — "¿hablasteis?" -> "¿qué tal?" -> "¿qué sacaste?" (only
+  // after a good/great rating). This is the highest-weight block on the card once
+  // there's something to rate, so it always gets its own colored section with big
+  // tap targets, never a thin strip of small pills.
   function renderFeedback(dark) {
-    const pill = pillFor(dark);
-    const labelColor = dark ? "rgba(255,255,255,0.55)" : "#6E7892";
-    if (fb) {
+    const cardColor = dark ? "#FFFFFF" : "#2D3852";
+    const subColor = dark ? "rgba(255,255,255,0.6)" : "#6E7892";
+    const bigButton = (accent) => ({
+      width: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      padding: "13px 14px",
+      borderRadius: 13,
+      fontFamily: "Fustat, sans-serif",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer",
+      border: "none",
+      background: accent
+        ? dark
+          ? "#1FD0EF"
+          : "#2D3852"
+        : dark
+          ? "rgba(255,255,255,0.1)"
+          : "#F2F8FA",
+      color: accent ? (dark ? "#2D3852" : "#FFFFFF") : dark ? "#FFFFFF" : "#2D3852",
+    });
+    const softLink = {
+      background: "transparent",
+      border: "none",
+      color: subColor,
+      fontSize: 11.5,
+      fontWeight: 600,
+      textDecoration: "underline",
+      cursor: "pointer",
+      padding: "6px 0",
+    };
+
+    if (settled) {
+      const thanks =
+        fb.talked === "wont"
+          ? "Anotado, gracias."
+          : fb.rating === "meh"
+            ? "Gracias por el feedback."
+            : "Gracias — nos alegra que sirviera.";
       return (
-        <span style={{ fontSize: 11, color: dark ? "rgba(255,255,255,0.6)" : "#6E7892" }}>
-          {fb.talked
-            ? fb.takeaway === "nothing"
-              ? "Gracias por el feedback."
-              : "Gracias — nos alegra que sirviera."
-            : "Ok, quizá en otro momento."}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{fb.talked === "wont" ? "👌" : fb.rating === "meh" ? "🙏" : "🎉"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: cardColor }}>{thanks}</span>
+        </div>
       );
     }
+
+    if (dismissed) {
+      return (
+        <span style={{ fontSize: 12, color: subColor }}>Vale, te lo preguntamos más tarde.</span>
+      );
+    }
+
     if (fbStep === "talked") {
       return (
-        <>
-          <span style={{ fontSize: 11, color: labelColor }}>¿Hablasteis?</span>
-          <button type="button" disabled={busy} style={pill} onClick={() => setFbStep("takeaway")}>
-            Sí
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>
+            ¿Hablaste con {counterpart.full_name?.split(/\s+/)[0] || "él/ella"}?
+          </span>
+          <button type="button" disabled={busy} style={bigButton(true)} onClick={() => setFbStep("rating")}>
+            Sí, hablamos
           </button>
-          <button type="button" disabled={busy} style={pill} onClick={() => sendFeedback({ talked: false })}>
-            Aún no
-          </button>
-        </>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              disabled={busy}
+              style={{ ...bigButton(false), flex: 1 }}
+              onClick={() => {
+                engage();
+                setDismissed(true);
+              }}
+            >
+              Todavía no
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              style={{ ...bigButton(false), flex: 1, opacity: 0.75 }}
+              onClick={() => sendFeedback({ talked: "wont" })}
+            >
+              No va a poder ser
+            </button>
+          </div>
+        </div>
       );
     }
+
+    if (fbStep === "rating") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>¿Qué tal fue?</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            {RATINGS.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                disabled={busy}
+                style={{
+                  ...bigButton(false),
+                  flex: 1,
+                  flexDirection: "column",
+                  gap: 4,
+                  padding: "12px 6px",
+                }}
+                onClick={() => {
+                  if (r.key === "meh") {
+                    sendFeedback({ talked: "yes", rating: "meh" });
+                  } else {
+                    setPendingRating(r.key);
+                    setFbStep("takeaway");
+                  }
+                }}
+              >
+                <span style={{ fontSize: 20, lineHeight: 1 }}>{r.emoji}</span>
+                <span style={{ fontSize: 10.5 }}>{r.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // takeaway (optional, only reached after a "great"/"good" rating)
     return (
-      <>
-        <span style={{ fontSize: 11, color: labelColor }}>¿Qué te llevaste?</span>
-        {TAKEAWAYS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            disabled={busy}
-            style={{
-              ...pill,
-              ...(t.muted
-                ? dark
-                  ? { color: "rgba(255,255,255,0.65)", background: "transparent" }
-                  : { color: "#9AA3B8", background: "transparent", border: "1px solid #E4EAF0" }
-                : {}),
-            }}
-            onClick={() => sendFeedback({ talked: true, takeaway: t.key })}
-          >
-            {t.label}
-          </button>
-        ))}
-      </>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>¿Qué sacaste?</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {TAKEAWAYS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              disabled={busy}
+              style={{
+                background: dark ? "rgba(255,255,255,0.1)" : "#F2F8FA",
+                border: dark ? "1px solid rgba(255,255,255,0.16)" : "1px solid #DCE6EC",
+                borderRadius: 999,
+                color: dark ? "#FFFFFF" : "#2D3852",
+                fontSize: 11.5,
+                fontWeight: 600,
+                padding: "8px 13px",
+                cursor: "pointer",
+              }}
+              onClick={() => sendFeedback({ talked: "yes", rating: pendingRating, takeaway: t.key })}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          style={softLink}
+          onClick={() => sendFeedback({ talked: "yes", rating: pendingRating })}
+        >
+          Saltar
+        </button>
+      </div>
     );
   }
 
@@ -347,12 +432,9 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
       {stale && !expanded && (
         <div
           style={{
-            padding: "12px 16px 14px",
-            borderTop: "1px solid #F0F3F6",
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-            flexWrap: "wrap",
+            padding: "14px 16px 16px",
+            background: "#ECFAFD",
+            borderTop: "1px solid #D6EEF5",
           }}
         >
           {renderFeedback(false)}
@@ -427,7 +509,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
               </div>
             )}
 
-            {/* questions checklist */}
+            {/* questions — a few angles to pull on, not a checklist */}
             {questions.length > 0 && (
               <div style={{ padding: "16px 18px 0" }}>
                 <div
@@ -442,50 +524,24 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                 >
                   {isFounder ? "Pregúntale" : "Qué te podría preguntar"}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-                  {questions.map((q, i) => {
-                    const on = checked.has(i);
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => toggleQuestion(i)}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {questions.map((q, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <span
                         style={{
-                          display: "flex",
-                          gap: 10,
-                          alignItems: "flex-start",
-                          background: "transparent",
-                          border: "none",
-                          padding: 0,
-                          textAlign: "left",
-                          cursor: "pointer",
+                          flexShrink: 0,
+                          width: 18,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#1FD0EF",
+                          lineHeight: 1.45,
                         }}
                       >
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke={on ? "#1FD0EF" : "#B9C1D4"}
-                          strokeWidth="2"
-                          style={{ flexShrink: 0, marginTop: 1 }}
-                        >
-                          <rect x="4" y="4" width="16" height="16" rx="4" fill={on ? "#1FD0EF" : "none"} />
-                          {on && <path d="M8 12.5l2.5 2.5 5-6" stroke="#FFFFFF" />}
-                        </svg>
-                        <span
-                          style={{
-                            fontSize: 12.5,
-                            lineHeight: 1.4,
-                            color: on ? "#8A93A6" : "#2D3852",
-                            textDecoration: on ? "line-through" : "none",
-                          }}
-                        >
-                          {q}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        {i + 1}.
+                      </span>
+                      <span style={{ fontSize: 12.5, lineHeight: 1.45, color: "#2D3852" }}>{q}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -557,16 +613,12 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
               </button>
             </div>
 
-            {/* feedback */}
+            {/* feedback — own section, not a thin footer strip */}
             <div
               style={{
-                marginTop: 14,
-                padding: "13px 18px",
+                marginTop: 16,
+                padding: "16px 18px",
                 background: "#2D3852",
-                display: "flex",
-                alignItems: "center",
-                gap: 9,
-                flexWrap: "wrap",
               }}
             >
               {renderFeedback(true)}

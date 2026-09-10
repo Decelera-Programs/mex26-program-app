@@ -143,16 +143,40 @@ const MATCH_SECTION_TO_TAGS: Record<string, string[]> = {
 // over-long strings are clipped, a missing opener is tolerated, only a missing
 // topic falls back to the deterministic text.
 
-// After a match: "did you talk?" and, if so, "what did you take away?".
-// `useful` is derived from `takeaway` (anything but "nothing" -> true) when not sent.
+// After a match, in up to three quick taps:
+//   1. talked:  "yes" | "not_yet" (ask me later) | "wont" (couldn't / won't happen)
+//   2. rating (only when talked = "yes"):  "great" | "good" | "meh"
+//   3. takeaway (optional, only when rating is great/good)
+// `useful` is derived from `rating` (great/good -> true, meh -> false) and kept on
+// the stored object for the EM-reputation and pair-cooldown consumers.
 const matchFeedbackSchema = z
   .object({
-    talked: z.boolean(),
-    useful: z.boolean().nullable().optional(),
-    takeaway: z.enum(["idea", "contact", "perspective", "nothing"]).nullable().optional(),
+    talked: z.enum(["yes", "not_yet", "wont"]),
+    rating: z.enum(["great", "good", "meh"]).nullable().optional(),
+    takeaway: z.enum(["idea", "contact", "perspective", "collab"]).nullable().optional(),
     note: z.string().max(500).nullable().optional(),
   })
   .strict();
+
+// True / false / null "was this useful to the founder", rating-aware with a
+// fallback to the older boolean `useful` field on pre-existing rows.
+function founderRatingUseful(
+  fb: { founder?: { rating?: unknown; useful?: unknown } } | null | undefined,
+): boolean | null {
+  const r = fb?.founder?.rating;
+  if (r === "great" || r === "good") return true;
+  if (r === "meh") return false;
+  const u = fb?.founder?.useful;
+  return typeof u === "boolean" ? u : null;
+}
+
+// One side's feedback is "settled" only when they said yes (rated it) or "wont".
+// "not_yet" (ask me later) and no answer keep the reminder + pending card alive.
+function feedbackIsSettled(roleFb: unknown): boolean {
+  if (!roleFb || typeof roleFb !== "object" || Array.isArray(roleFb)) return false;
+  const t = (roleFb as { talked?: unknown }).talked;
+  return t === "yes" || t === "wont" || t === true; // `true` = pre-enum rows
+}
 
 // EM-level reputation: EMs that founders repeatedly find unhelpful get their
 // match scores dampened. Needs a minimum sample size so one bad rating can't
@@ -163,10 +187,12 @@ const MATCH_FEEDBACK_MIN_MULTIPLIER = 0.4;
 
 // Repeated (founder, EM) pairs: instead of a hard ban, dampen the score and let
 // it recover over a cooldown. A pair matched within HARD_EXCLUDE_DAYS is skipped
-// outright; a pair the founder last rated useful:false cools down much slower;
-// a pair last rated useful:true carries no penalty.
+// outright; a pair the founder last rated "meh" cools down much slower; a pair
+// the founder said "won't happen" gets a medium cooldown (real signal, but not a
+// quality rejection); a pair rated useful carries no penalty.
 const MATCH_PAIR_HARD_EXCLUDE_DAYS = 1;
 const MATCH_PAIR_COOLDOWN_DAYS = 3;
+const MATCH_PAIR_COOLDOWN_WONT_DAYS = 7;
 const MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS = 10;
 
 // End-of-day nudge to rate the day's match. runMatchFeedbackReminders only fires
@@ -1207,21 +1233,28 @@ async function loadEmScoreMultipliers(): Promise<Map<string, number>> {
     select: { em_id: true, feedback: true },
   });
 
-  const tally = new Map<string, { useful: number; total: number }>();
+  const tally = new Map<string, { score: number; total: number }>();
   for (const row of rows) {
-    const fb = row.feedback as { founder?: { useful?: unknown } } | null;
-    const founderUseful = fb?.founder?.useful;
-    if (typeof founderUseful !== "boolean") continue;
-    const t = tally.get(row.em_id) ?? { useful: 0, total: 0 };
+    const fb = row.feedback as { founder?: { rating?: unknown; useful?: unknown } } | null;
+    const r = fb?.founder?.rating;
+    let score: number | null =
+      r === "great" ? 1 : r === "good" ? 0.6 : r === "meh" ? 0 : null;
+    if (score === null) {
+      // Pre-rating rows only carried a boolean `useful`.
+      const u = fb?.founder?.useful;
+      if (typeof u === "boolean") score = u ? 0.8 : 0;
+    }
+    if (score === null) continue;
+    const t = tally.get(row.em_id) ?? { score: 0, total: 0 };
     t.total += 1;
-    if (founderUseful) t.useful += 1;
+    t.score += score;
     tally.set(row.em_id, t);
   }
 
   const multipliers = new Map<string, number>();
   for (const [emId, t] of tally) {
     if (t.total < MATCH_FEEDBACK_MIN_SAMPLES) continue;
-    const rate = t.useful / t.total; // 0..1
+    const rate = t.score / t.total; // 0..1
     const mult =
       MATCH_FEEDBACK_MIN_MULTIPLIER + (1 - MATCH_FEEDBACK_MIN_MULTIPLIER) * rate;
     if (mult < 1) multipliers.set(emId, mult);
@@ -1247,13 +1280,13 @@ async function loadPairMultipliers(founderIds: string[], todayKey: string) {
   });
 
   const todayMs = new Date(`${todayKey}T00:00:00.000Z`).getTime();
-  const latest = new Map<string, { daysAgo: number; useful: unknown }>();
+  const latest = new Map<string, { daysAgo: number; useful: boolean | null; talked: unknown }>();
   for (const row of rows) {
     const key = `${row.founder_id}:${row.em_id}`;
     priorCount.set(key, (priorCount.get(key) ?? 0) + 1);
     const daysAgo = Math.floor((todayMs - new Date(row.match_date).getTime()) / 86400000);
-    const fb = row.feedback as { founder?: { useful?: unknown } } | null;
-    latest.set(key, { daysAgo, useful: fb?.founder?.useful });
+    const fb = row.feedback as { founder?: { rating?: unknown; useful?: unknown; talked?: unknown } } | null;
+    latest.set(key, { daysAgo, useful: founderRatingUseful(fb), talked: fb?.founder?.talked });
   }
 
   for (const [key, info] of latest) {
@@ -1263,7 +1296,11 @@ async function loadPairMultipliers(founderIds: string[], todayKey: string) {
     }
     if (info.useful === true) continue; // "talk again" — compete on raw affinity
     const cooldown =
-      info.useful === false ? MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS : MATCH_PAIR_COOLDOWN_DAYS;
+      info.useful === false
+        ? MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS
+        : info.talked === "wont"
+          ? MATCH_PAIR_COOLDOWN_WONT_DAYS
+          : MATCH_PAIR_COOLDOWN_DAYS;
     const mult = Math.min(1, info.daysAgo / cooldown);
     if (mult < 1) multiplier.set(key, mult);
   }
@@ -1589,10 +1626,7 @@ async function runMatchFeedbackReminders(now = new Date()) {
 
       const patch: Record<string, string> = {};
       for (const side of sides) {
-        const roleFb = fb[side.role];
-        const answered =
-          roleFb && typeof roleFb === "object" && !Array.isArray(roleFb) && "talked" in (roleFb as object);
-        if (answered || reminders[side.role]) continue;
+        if (feedbackIsSettled(fb[side.role]) || reminders[side.role]) continue;
 
         const firstName = side.counterpart.trim().split(/\s+/)[0] || side.counterpart;
         await prisma.notification.create({
@@ -2438,18 +2472,17 @@ app.get("/matches/me", async (req, res) => {
     });
 
     const isToday = (m: MatchWithParties) => m.match_date.getTime() === todayMatchDate.getTime();
-    const hasMyFeedback = (m: MatchWithParties) => {
+    const mySideSettled = (m: MatchWithParties) => {
       const fb =
         m.feedback && typeof m.feedback === "object" && !Array.isArray(m.feedback)
           ? (m.feedback as Record<string, unknown>)
           : {};
-      const mine = fb[m.founder_id === person.id ? "founder" : "em"];
-      return Boolean(mine && typeof mine === "object" && !Array.isArray(mine) && "talked" in (mine as object));
+      return feedbackIsSettled(fb[m.founder_id === person.id ? "founder" : "em"]);
     };
 
     const todayRow = rows.find(isToday) ?? null;
     const pending = rows
-      .filter((m) => !isToday(m) && !hasMyFeedback(m))
+      .filter((m) => !isToday(m) && !mySideSettled(m))
       .map((m) => serializeMatchForPerson(m, person.id, { stale: true }));
 
     res.json({
@@ -2507,13 +2540,15 @@ app.patch("/matches/:id/feedback", async (req, res) => {
       match.feedback && typeof match.feedback === "object" && !Array.isArray(match.feedback)
         ? (match.feedback as Record<string, unknown>)
         : {};
-    const { talked, takeaway, note } = parsedBody.data;
-    const usefulFromTakeaway =
-      takeaway === "nothing" ? false : takeaway ? true : parsedBody.data.useful ?? null;
+    const { talked, rating, takeaway, note } = parsedBody.data;
+    const talkedYes = talked === "yes";
+    const useful =
+      !talkedYes ? null : rating === "great" || rating === "good" ? true : rating === "meh" ? false : null;
     const mine = {
-      talked,
-      useful: talked ? usefulFromTakeaway : null,
-      takeaway: talked ? takeaway ?? null : null,
+      talked, // "yes" | "not_yet" | "wont"
+      rating: talkedYes ? rating ?? null : null,
+      useful, // derived — kept for the EM-reputation / pair-cooldown consumers
+      takeaway: talkedYes ? takeaway ?? null : null,
       note: (note ?? "").trim().slice(0, 500) || null,
       at: new Date().toISOString(),
     };
