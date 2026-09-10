@@ -484,9 +484,9 @@ export default function Home() {
             <div className="flex items-center gap-[10px]">
               <div
                 className="w-[34px] h-[34px] rounded-full flex items-center justify-center"
-                style={{ background: "#1FD0EF" }}
+                style={{ background: "#ECFAFD" }}
               >
-                <CalendarDays size={17} color="#2D3852" />
+                <CalendarDays size={17} color="#0A859B" />
               </div>
               <div>
                 <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>Today&apos;s schedule</p>
@@ -527,7 +527,7 @@ export default function Home() {
 
           {upcomingEvents.length > 0 ? (
             <div className="flex flex-col gap-[8px] px-[4px] pt-[2px]">
-              {upcomingEvents.map((event, idx) => (
+              {upcomingEvents.map((event) => (
                 <div key={event.id} className="flex items-center gap-[12px]">
                   <span style={{ fontSize: "11.5px", color: "#6E7892", minWidth: 36 }}>{formatHour(getEventStart(event))}</span>
                   <span
@@ -536,8 +536,7 @@ export default function Home() {
                       width: 7,
                       height: 7,
                       borderRadius: "9999px",
-                      // El "tercer punto" del mini schedule va en naranja Decelera.
-                      backgroundColor: idx === 2 ? "#FF9950" : getEventDotColor(event.type),
+                      backgroundColor: getEventDotColor(event.type),
                       flex: "0 0 auto",
                     }}
                   />
@@ -776,7 +775,7 @@ function getPersonInitials(fullName) {
     .slice(0, 2);
 }
 
-function AvatarBubble({ person, i, gradients }) {
+function AvatarBubble({ person, i }) {
   const [imageFailed, setImageFailed] = useState(false);
   const photoUrl = person?.photo_url;
   const initials = getPersonInitials(person?.full_name || person?.company || "");
@@ -791,8 +790,8 @@ function AvatarBubble({ person, i, gradients }) {
         width: 36,
         height: 36,
         borderRadius: "9999px",
-        background: gradients[i % gradients.length],
-        color: "#FFFFFF",
+        background: "#EEF2F5",
+        color: "#2D3852",
         border: "2px solid #FFFFFF",
         overflow: "hidden",
         display: "flex",
@@ -820,13 +819,6 @@ function AvatarBubble({ person, i, gradients }) {
 }
 
 function PeopleCardPreview({ people, onClick }) {
-  const gradients = [
-    "linear-gradient(135deg, #1FD0EF, #0A859B)",
-    "linear-gradient(135deg, #FF9950, #D9534F)",
-    "linear-gradient(135deg, #B9C1D4, #2D3852)",
-    "linear-gradient(135deg, #FAF3DC, #FF9950)",
-  ];
-
   const todayKey = getTodayKey();
   const presentToday = Array.isArray(people)
     ? people.filter((p) => {
@@ -851,7 +843,7 @@ function PeopleCardPreview({ people, onClick }) {
         <div style={{ position: "relative", width: 78, height: 36 }} aria-hidden="true">
           {preview.length ? (
             preview.map((p, i) => (
-              <AvatarBubble key={p?.id || i} person={p} i={i} gradients={gradients} />
+              <AvatarBubble key={p?.id || i} person={p} i={i} />
             ))
           ) : (
             ["MS", "JR", "AP", "LC"].map((txt, i) => (
@@ -864,8 +856,8 @@ function PeopleCardPreview({ people, onClick }) {
                   width: 36,
                   height: 36,
                   borderRadius: "9999px",
-                  background: gradients[i % gradients.length],
-                  color: "#FFFFFF",
+                  background: "#EEF2F5",
+                  color: "#2D3852",
                   border: "2px solid #FFFFFF",
                   display: "flex",
                   alignItems: "center",

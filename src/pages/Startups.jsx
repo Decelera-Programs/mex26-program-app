@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Building2, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { getCurrentUser, listStartups } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
+import EmptyState from "../components/EmptyState";
 
 export default function Startups() {
   const [user, setUser] = useState(null);
@@ -47,25 +48,20 @@ export default function Startups() {
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
 
         <div
-          className="relative overflow-hidden"
           style={{
             borderRadius: 20,
-            padding: 22,
+            padding: "20px 22px",
             background: "#FAF3DC",
             color: "#2D3852",
-            boxShadow: "0 18px 40px rgba(31, 208, 239, 0.10)",
+            boxShadow: "0 1px 3px rgba(45, 56, 82, 0.06)",
             marginBottom: 16,
           }}
         >
-          <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
-            style={{ background: "rgba(45, 56, 82, 0.18)" }}
-          />
-          <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               Startups
             </h1>
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>
+            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 3 }}>
               {startups.length} companies at México 2026
             </p>
           </Motion.div>
@@ -85,7 +81,11 @@ export default function Startups() {
         {loading ? (
           <LoadingState message="Discovering Startups" />
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground text-sm">No startups found</div>
+          <EmptyState
+            icon={Building2}
+            title={search ? "No companies match your search" : "No companies yet"}
+            hint={search ? "Try a different name or sector." : "They'll show up here once they're added."}
+          />
         ) : (
           <div className="card-list">
             {filtered.map((startup, i) => (
@@ -105,6 +105,20 @@ export default function Startups() {
   );
 }
 
+// One quiet chip style for all startup metadata (stage, year) — same size,
+// same weight, same colour, so the card reads as one thing.
+const chipStyle = {
+  fontSize: 10,
+  fontWeight: 600,
+  color: "#6E7892",
+  background: "#F2F8FA",
+  border: "1px solid #E4EAF0",
+  borderRadius: 999,
+  padding: "3px 9px",
+  letterSpacing: "0.04em",
+  lineHeight: 1.3,
+};
+
 function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
   return (
     <Motion.div
@@ -114,11 +128,11 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
     >
       <Link to={`/startup/${startup.id}`} className="block">
         <div className="app-card-interactive person-card">
-          <div className="flex items-center gap-[14px]">
+          <div className="flex items-center gap-[13px]">
             {startup.logo_url && !failedLogos[startup.id] ? (
               <div
-                className="flex-shrink-0 bg-white border border-[#E2E7ED]"
-                style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, borderRadius: 12, padding: 4, overflow: "hidden" }}
+                className="flex-shrink-0 bg-white"
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 13, border: "1px solid #E4EAF0", padding: 5, overflow: "hidden" }}
               >
                 <img
                   src={startup.logo_url}
@@ -131,49 +145,45 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
               </div>
             ) : (
               <div
-                className="flex items-center justify-center text-[#2D3852] font-bold text-lg flex-shrink-0"
-                style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, borderRadius: 12, background: "#DDE4EB" }}
+                className="flex items-center justify-center flex-shrink-0"
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 13, background: "#EEF2F5", color: "#2D3852", fontWeight: 700, fontSize: 17 }}
               >
-                {startup.name[0]}
+                {(startup.name || "?")[0].toUpperCase()}
               </div>
             )}
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground text-sm" style={{ margin: 0 }}>{startup.name}</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-foreground" style={{ margin: 0, fontSize: 14, lineHeight: 1.25 }}>
+                {startup.name}
+              </p>
               {startup.sector && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 1 }}>
-                  <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 9999, backgroundColor: "#1FD0EF", flex: "0 0 auto" }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "#2D3852" }}>{startup.sector}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, minWidth: 0 }}>
+                  <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 9999, background: "#1F9AAF", flex: "0 0 auto" }} />
+                  <span
+                    style={{
+                      fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+                      color: "#6E7892", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {startup.sector}
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
           {startup.tagline && (
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 10, lineHeight: 1.45 }}>
+            <p style={{ fontSize: 11.5, color: "#6E7892", marginTop: 10, lineHeight: 1.45 }}>
               {startup.tagline}
             </p>
           )}
 
           {(startup.stage || startup.founded_year) && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: startup.tagline ? 8 : 10 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: startup.tagline ? 9 : 10 }}>
               {startup.stage && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, color: "#1FD0EF",
-                  background: "rgba(31, 208, 239, 0.12)", borderRadius: 999,
-                  padding: "3px 10px", letterSpacing: "0.06em", textTransform: "uppercase",
-                  lineHeight: 1.3,
-                }}>
-                  {startup.stage}
-                </span>
+                <span style={chipStyle}>{String(startup.stage).toUpperCase()}</span>
               )}
               {startup.founded_year && (
-                <span style={{
-                  fontSize: 10, fontWeight: 500, color: "#6E7892",
-                  background: "#EEF2F5", borderRadius: 999,
-                  padding: "3px 10px", lineHeight: 1.3,
-                }}>
-                  {startup.founded_year}
-                </span>
+                <span style={chipStyle}>{startup.founded_year}</span>
               )}
             </div>
           )}

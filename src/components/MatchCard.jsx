@@ -54,7 +54,7 @@ function Avatar({ person, size, radius, fontSize }) {
         height: size,
         minWidth: size,
         borderRadius: radius,
-        background: "#1FD0EF",
+        background: "#EEF2F5",
         overflow: "hidden",
         flexShrink: 0,
         display: "flex",

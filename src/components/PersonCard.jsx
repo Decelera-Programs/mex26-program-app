@@ -2,26 +2,38 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { motion as Motion } from "framer-motion";
 
-const typeColors = {
-  experience_maker: "#1FD0EF",
-  team: "#B9C1D4",
-  vc: "#2D3852",
-  alumni: "#FFB950",
-  founder: "#FFB950",
+// Role -> label + the small dot colour next to it. Muted, evenly weighted;
+// the dot is the only colour on the card, everything else is neutral.
+const ROLE_META = {
+  experience_maker: { label: "Experience Maker", dot: "var(--dc-role-em, #1f9aaf)" },
+  founder: { label: "Founder", dot: "var(--dc-role-founder, #c77b4a)" },
+  vc: { label: "Investor", dot: "var(--dc-role-vc, #5e6aa0)" },
+  team: { label: "Team", dot: "var(--dc-role-team, #98a0b3)" },
+  alumni: { label: "Alumni", dot: "var(--dc-role-founder, #c77b4a)" },
 };
 
 export default function PersonCard({ person, index = 0 }) {
-  const contactType = person.contact_type || person.person_type || "";
-  const normalizedContactType = String(contactType).trim().toLowerCase().replace(/[\s-]+/g, "_");
   const [imageFailed, setImageFailed] = useState(false);
-  const initials = person.full_name
-    .split(" ")
+
+  const rawType = person.contact_type || person.person_type || "";
+  const normalizedType = String(rawType).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const role = ROLE_META[normalizedType] || null;
+
+  const initials = (person.full_name || "")
+    .split(/\s+/)
     .map((n) => n[0])
+    .filter(Boolean)
     .join("")
     .toUpperCase()
     .slice(0, 2);
 
-  const accentColor = typeColors[normalizedContactType] || "#B9C1D4";
+  // A concrete affiliation to sit after the role label.
+  const affiliation =
+    (normalizedType === "founder" && person.startup?.name) ||
+    person.company ||
+    person.startup?.name ||
+    person.title ||
+    "";
 
   return (
     <Motion.div
@@ -30,42 +42,73 @@ export default function PersonCard({ person, index = 0 }) {
       transition={{ duration: 0.44, delay: Math.min(index, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
     >
       <Link to={`/person/${person.id}`} className="block">
-        <div
-          className="app-card-interactive person-card"
-          style={{ borderLeft: `5px solid ${accentColor}` }}
-        >
-          <div className="flex items-center gap-[14px]">
-            {person.photo_url && !imageFailed ? (
-              <div
-                className="overflow-hidden flex-shrink-0 bg-white border border-[#E2E7ED]"
-                style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, borderRadius: 12 }}
-              >
+        <div className="app-card-interactive person-card">
+          <div className="flex items-center gap-[13px]">
+            <div
+              className="flex items-center justify-center flex-shrink-0 overflow-hidden"
+              style={{
+                width: 46,
+                height: 46,
+                minWidth: 46,
+                borderRadius: 13,
+                background: "#EEF2F5",
+                color: "#2D3852",
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              {person.photo_url && !imageFailed ? (
                 <img
                   src={person.photo_url}
                   alt={person.full_name}
                   referrerPolicy="no-referrer"
                   onError={() => setImageFailed(true)}
-                  className="object-cover"
-                  style={{ width: "100%", height: "100%", display: "block" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
-              </div>
-            ) : (
-              <div
-                className="flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, borderRadius: 12, background: accentColor }}
+              ) : (
+                initials
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p
+                className="font-semibold text-foreground"
+                style={{ margin: 0, fontSize: 14, lineHeight: 1.25 }}
               >
-                {initials}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground text-sm" style={{ margin: 0 }}>{person.full_name}</p>
+                {person.full_name}
+              </p>
+
+              {role && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, minWidth: 0 }}>
+                  <span
+                    aria-hidden="true"
+                    style={{ width: 6, height: 6, borderRadius: 9999, background: role.dot, flex: "0 0 auto" }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "#6E7892",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {role.label}
+                    {affiliation ? <span style={{ color: "#9AA3B8" }}> · {affiliation}</span> : null}
+                  </span>
+                </div>
+              )}
+
               {person.tagline && (
                 <p
                   style={{
-                    fontSize: 11,
+                    fontSize: 11.5,
                     color: "#6E7892",
-                    marginTop: 2,
-                    marginBottom: 0,
+                    lineHeight: 1.4,
+                    margin: "5px 0 0",
                     overflow: "hidden",
                     display: "-webkit-box",
                     WebkitLineClamp: 1,

@@ -38,7 +38,7 @@ function Avatar({ person, size = 56 }) {
         height: size,
         minWidth: size,
         borderRadius: 16,
-        background: "#1FD0EF",
+        background: "#EEF2F5",
         overflow: "hidden",
         flexShrink: 0,
         display: "flex",

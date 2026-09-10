@@ -46,6 +46,13 @@
   --dc-amber: #ffb950;       /* alerts, "needs attention", 3rd schedule dot */
   --dc-amber-strong: #ff9950;
 
+  /* Person-role accents — muted categorical set, used only as a small dot
+     next to an uppercase text label (never as a large fill). */
+  --dc-role-founder: #c77b4a;
+  --dc-role-em: #1f9aaf;
+  --dc-role-vc: #5e6aa0;
+  --dc-role-team: #98a0b3;
+
   /* Text */
   --dc-text: #2d3852;        /* = navy */
   --dc-text-body: #4a5573;   /* long-form body on light */
@@ -133,10 +140,7 @@
   }
 
   .person-card {
-    padding-left: 2.25rem;
-    padding-right: 2.25rem;
-    padding-top: 0.65rem;
-    padding-bottom: 0.4rem;
+    padding: 15px 16px 16px;
   }
 
   .person-card-meta {

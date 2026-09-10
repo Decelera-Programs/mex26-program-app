@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import { getCurrentUser, listPeople } from "../api/dataService";
@@ -7,13 +7,14 @@ import { PROGRAM_TIMEZONE } from "../lib/dateTime";
 import PersonCard from "../components/PersonCard";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from '../components/LoadingState'
+import EmptyState from "../components/EmptyState";
 
 const TABS = [
-  { key: "all", label: "All", color: "#2D3852" },
-  { key: "experience_maker", label: "Exp. Makers", color: "#1FD0EF" },
-  { key: "founder", label: "Founders", color: "#FFB950" },
-  { key: "vc", label: "VCs", color: "#2D3852" },
-  { key: "team", label: "Team", color: "#B9C1D4" },
+  { key: "all", label: "All" },
+  { key: "experience_maker", label: "Exp. Makers" },
+  { key: "founder", label: "Founders" },
+  { key: "vc", label: "Investors" },
+  { key: "team", label: "Team" },
 ];
 
 export default function People() {
@@ -73,25 +74,20 @@ export default function People() {
     <div className="w-full pt-[30px] pb-6 sm:pt-[40px]" style={{ background: "#F2F8FA" }}>
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
         <div
-          className="relative overflow-hidden"
           style={{
             borderRadius: 20,
-            padding: 22,
+            padding: "20px 22px",
             background: "#FAF3DC",
             color: "#2D3852",
-            boxShadow: "0 18px 40px rgba(31, 208, 239, 0.10)",
+            boxShadow: "0 1px 3px rgba(45, 56, 82, 0.06)",
             marginBottom: 16,
           }}
         >
-          <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
-            style={{ background: "rgba(45, 56, 82, 0.18)" }}
-          />
-          <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               People
             </h1>
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>Everyone at México 2026</p>
+            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 3 }}>Everyone at México 2026</p>
           </Motion.div>
         </div>
 
@@ -106,7 +102,7 @@ export default function People() {
           />
         </div>
 
-        <label className="flex items-center pl-4 cursor-pointer select-none" style={{ marginBottom: 20, gap: 20 }}>
+        <label className="flex items-center pl-4 cursor-pointer select-none" style={{ marginBottom: 18, gap: 9 }}>
           <input
             type="checkbox"
             checked={todayOnly}
@@ -115,50 +111,63 @@ export default function People() {
           />
           <span
             style={{
-              width: 15,
-              height: 15,
-              borderRadius: 4,
+              width: 16,
+              height: 16,
+              borderRadius: 5,
               border: todayOnly ? "none" : "1.5px solid #B0BAD0",
               background: todayOnly ? "#2D3852" : "transparent",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
-              transition: "all 0.15s",
+              transition: "background 0.15s ease, border-color 0.15s ease",
             }}
           >
             {todayOnly && (
               <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
           </span>
-          <span style={{ fontSize: 11.5, fontWeight: 500, color: "#2D3852", marginLeft: 1.5 }}>Here today</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#2D3852" }}>Here today</span>
         </label>
 
         <div className="people-filter-tabs flex overflow-x-auto pb-3 pl-4">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-shrink-0 rounded-full font-semibold transition-all ${
-                activeTab === tab.key ? "text-white" : "app-card text-muted-foreground"
-              }`}
-              style={
-                activeTab === tab.key
-                  ? { background: tab.color, color: "#FFFFFF", marginRight: 6, padding: "6px 13px", fontSize: 11.5, border: "1px solid transparent" }
-                  : { marginRight: 6, padding: "6px 13px", fontSize: 11.5, border: `1px solid ${tab.color}55`, background: `${tab.color}12` }
-              }
-            >
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className="press-scale flex-shrink-0 rounded-full font-semibold transition-colors duration-200"
+                style={{
+                  marginRight: 6,
+                  padding: "6px 13px",
+                  fontSize: 11.5,
+                  border: "1px solid transparent",
+                  background: active ? "#2D3852" : "#FFFFFF",
+                  color: active ? "#FFFFFF" : "#6E7892",
+                  borderColor: active ? "transparent" : "#E4EAF0",
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {loading ? (
           <LoadingState message="Connecting with People" />
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground text-sm">No people found</div>
+          <EmptyState
+            icon={Users}
+            title={search || activeTab !== "all" || todayOnly ? "No one matches that" : "No people yet"}
+            hint={
+              search || activeTab !== "all" || todayOnly
+                ? "Try a different search or filter."
+                : "Attendees will appear here as they're added."
+            }
+          />
         ) : (
           <div className="card-list">
             {filtered.map((person, i) => (
