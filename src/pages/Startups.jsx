@@ -133,7 +133,7 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
             {startup.logo_url && !failedLogos[startup.id] ? (
               <div
                 className="flex-shrink-0 bg-white"
-                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 13, border: "1px solid #E4EAF0", padding: 5, overflow: "hidden" }}
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, border: "1px solid #E4EAF0", boxShadow: "0 1px 3px rgba(45,56,82,0.06)", padding: 5, overflow: "hidden" }}
               >
                 <img
                   src={startup.logo_url}
@@ -147,13 +147,23 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
             ) : (
               <div
                 className="flex items-center justify-center flex-shrink-0"
-                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 13, background: "#EEF2F5", color: "#2D3852", fontWeight: 700, fontSize: 17 }}
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, background: "#EDF1F4", boxShadow: "inset 0 0 0 1px rgba(45,56,82,0.05)", color: "#2D3852", fontWeight: 700, fontSize: 17 }}
               >
                 {(startup.name || "?")[0].toUpperCase()}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-foreground" style={{ margin: 0, fontSize: 14, lineHeight: 1.25 }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontFamily: "Taviraj, Georgia, serif",
+                  fontSize: 15.5,
+                  fontWeight: 500,
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.01em",
+                  color: "#2D3852",
+                }}
+              >
                 {startup.name}
               </p>
               {startup.sector && (

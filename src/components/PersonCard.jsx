@@ -51,8 +51,9 @@ export default function PersonCard({ person, index = 0 }) {
                 width: 46,
                 height: 46,
                 minWidth: 46,
-                borderRadius: 13,
-                background: "#EEF2F5",
+                borderRadius: 14,
+                background: "#EDF1F4",
+                boxShadow: "inset 0 0 0 1px rgba(45,56,82,0.05)",
                 color: "#2D3852",
                 fontWeight: 700,
                 fontSize: 14,
@@ -73,8 +74,15 @@ export default function PersonCard({ person, index = 0 }) {
 
             <div className="min-w-0 flex-1">
               <p
-                className="font-semibold text-foreground"
-                style={{ margin: 0, fontSize: 14, lineHeight: 1.25 }}
+                style={{
+                  margin: 0,
+                  fontFamily: "Taviraj, Georgia, serif",
+                  fontSize: 15.5,
+                  fontWeight: 500,
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.01em",
+                  color: "#2D3852",
+                }}
               >
                 {person.full_name}
               </p>
