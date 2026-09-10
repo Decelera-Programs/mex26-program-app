@@ -278,9 +278,9 @@ export default function Notifications() {
               {notifications.map((notif, i) => (
                 <Motion.div
                   key={notif.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.26, delay: Math.min(i, 12) * 0.035, ease: [0.23, 1, 0.32, 1] }}
+                  transition={{ duration: 0.44, delay: Math.min(i, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
                   style={{ opacity: notif.is_read ? 0.6 : 1 }}
                 >
                   <button

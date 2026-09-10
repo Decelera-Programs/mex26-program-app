@@ -382,9 +382,9 @@ export default function OneOnOnes() {
                     return (
                       <Motion.div
                         key={item.id}
-                        initial={{ opacity: 0, y: 8 }}
+                        initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.26, delay: Math.min(animationIndex, 12) * 0.035, ease: [0.23, 1, 0.32, 1] }}
+                        transition={{ duration: 0.44, delay: Math.min(animationIndex, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
                         className="rounded-[20px] border overflow-hidden"
                         style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}
                       >
