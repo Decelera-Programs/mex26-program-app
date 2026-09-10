@@ -6,7 +6,7 @@ import { getCurrentUser, listStartups } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
-import { DUR, EASE, stagger } from "../lib/motion";
+import { DUR, EASE, SPRING, stagger } from "../lib/motion";
 
 export default function Startups() {
   const [user, setUser] = useState(null);
@@ -125,7 +125,7 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
     <Motion.div
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR.base, delay: stagger(index), ease: EASE.out }}
+      transition={{ ...SPRING, delay: stagger(index) }}
     >
       <Link to={`/startup/${startup.id}`} className="block">
         <div className="app-card-interactive person-card">

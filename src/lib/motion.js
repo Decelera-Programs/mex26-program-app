@@ -19,19 +19,23 @@ export const DUR = {
   page: 0.5, // route change
 };
 
-// Soft physical spring with a barely-there settle — the "premium" default for
-// a single prominent element easing into place.
-export const SPRING = { type: "spring", stiffness: 170, damping: 24, mass: 1 };
+// Physical spring with a light, tasteful settle — the default for a card or
+// list item easing into place. Lower `damping` = more bounce.
+export const SPRING = { type: "spring", stiffness: 210, damping: 21, mass: 1 };
 
-// Snappier spring for small, frequent UI (dropdowns, chips, popovers).
-export const SPRING_SNAP = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 };
+// More damped — for animating height (expand / collapse / grow-in), where an
+// overshoot would visibly jiggle the layout below.
+export const SPRING_GENTLE = { type: "spring", stiffness: 220, damping: 30, mass: 1 };
+
+// Snappier, for small frequent UI (dropdowns, chips, popovers).
+export const SPRING_SNAP = { type: "spring", stiffness: 340, damping: 28, mass: 0.9 };
 
 // Per-item delay for a staggered list reveal, capped so long lists don't crawl.
 export const stagger = (index, step = 0.07, cap = 10) => Math.min(index, cap) * step;
 
-// Ready-made props for the common "fade + rise into place" entrance.
+// Ready-made props for the common "fade + rise into place" entrance (spring).
 export const fadeUp = (distance = 18) => ({
   initial: { opacity: 0, y: distance },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: DUR.base, ease: EASE.out },
+  transition: SPRING,
 });
