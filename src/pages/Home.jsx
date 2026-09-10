@@ -457,9 +457,10 @@ export default function Home() {
         {todayMatch && !cameFromMatchLink ? (
           <MatchIntroModal
             match={todayMatch}
-            onSeeDetails={() =>
-              matchAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
+            onSeeDetails={() => {
+              setHighlightMatchId(todayMatch.id);
+              matchAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
           />
         ) : null}
         <AnimatePresence>
