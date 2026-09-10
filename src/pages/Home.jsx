@@ -391,49 +391,41 @@ export default function Home() {
             }}
           />
         ) : null}
-        <AnimatePresence initial={false}>
-        {homeLoading ? (
-          <HomeCardSkeleton key="match-skeleton" h={118} />
-        ) : todayMatch ? (
-          <AttentionWrap
-            key={`wrap-${todayMatch.id}`}
-            pulse={!engagedMatchIds.has(todayMatch.id)}
-          >
-            <MatchCard
-              match={todayMatch}
-              highlight={highlightMatchId === todayMatch.id}
-              onEngaged={markMatchEngaged}
-              onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)}
-            />
-          </AttentionWrap>
+        <AnimatePresence>
+        {!homeLoading && todayMatch ? (
+          <GrowIn key={`grow-${todayMatch.id}`}>
+            <AttentionWrap pulse={!engagedMatchIds.has(todayMatch.id)}>
+              <MatchCard
+                match={todayMatch}
+                highlight={highlightMatchId === todayMatch.id}
+                onEngaged={markMatchEngaged}
+                onClick={() => navigate(`/person/${todayMatch.counterpart.id}`)}
+              />
+            </AttentionWrap>
+          </GrowIn>
         ) : null}
         {!homeLoading && pendingMatches.map((m) => (
-          <AttentionWrap key={`wrap-${m.id}`} pulse={!engagedMatchIds.has(m.id) && !m.my_feedback}>
-            <MatchCard
-              match={m}
-              stale
-              highlight={highlightMatchId === m.id}
-              onEngaged={markMatchEngaged}
-              onClick={() => navigate(`/person/${m.counterpart.id}`)}
-            />
-          </AttentionWrap>
+          <GrowIn key={`grow-${m.id}`}>
+            <AttentionWrap pulse={!engagedMatchIds.has(m.id) && !m.my_feedback}>
+              <MatchCard
+                match={m}
+                stale
+                highlight={highlightMatchId === m.id}
+                onEngaged={markMatchEngaged}
+                onClick={() => navigate(`/person/${m.counterpart.id}`)}
+              />
+            </AttentionWrap>
+          </GrowIn>
         ))}
         </AnimatePresence>
 
-        <AnimatePresence initial={false}>
-        {homeLoading ? (
-          <HomeCardSkeleton key="one-on-ones-skeleton" h={74} />
-        ) : myOneOnOnesCount > 0 ? (
+        <AnimatePresence>
+        {!homeLoading && myOneOnOnesCount > 0 ? (
+          <GrowIn key="one-on-ones-grow">
           <AttentionWrap
-            key="one-on-ones-wrap"
             pulse={myOneOnOnesWithoutAudio > 0 && !oneOnOneVisitedToday}
           >
-          <Motion.button
-            key="one-on-ones-card"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1] }}
+          <button
             type="button"
             onClick={() => {
               const dayKey = getTodayKey();
@@ -469,8 +461,9 @@ export default function Home() {
                 </p>
               </div>
             ) : null}
-          </Motion.button>
+          </button>
           </AttentionWrap>
+          </GrowIn>
         ) : null}
         </AnimatePresence>
 
@@ -592,16 +585,24 @@ export default function Home() {
   );
 }
 
-// Holds a card slot while its data loads, at roughly the height the real card
-// will be — so when the fetch resolves the card mounts (or the slot clears)
-// with next to no layout shift, instead of popping in and shoving the page.
-function HomeCardSkeleton({ h = 88 }) {
+// Data-dependent Home cards (today's match, the 1:1 card) can only mount once
+// their fetch resolves. Instead of snapping into the layout and shoving the page
+// down, they grow open from zero height + fade over ~0.4s, so the push is gentle.
+// overflow is released after the animation so the card's own glow/shadow (the
+// "needs attention" pulse) isn't clipped.
+function GrowIn({ children }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div
-      className="dc-skeleton w-full rounded-[20px]"
-      style={{ height: h }}
-      aria-hidden="true"
-    />
+    <Motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+      onAnimationComplete={() => setOpen(true)}
+      style={{ overflow: open ? "visible" : "hidden" }}
+    >
+      {children}
+    </Motion.div>
   );
 }
 
