@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
 import { resolvePhotoUrl } from "../lib/photoUrl";
+import { DUR, EASE } from "../lib/motion";
 
 const introKey = (id) => `decelera.match.${id}.intro`;
 
@@ -121,9 +122,9 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
       onClick={close}
     >
       <Motion.div
-        initial={{ opacity: 0, y: 18, scale: 0.96 }}
+        initial={{ opacity: 0, y: 20, scale: 0.965 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+        transition={{ duration: DUR.base, ease: EASE.out }}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",

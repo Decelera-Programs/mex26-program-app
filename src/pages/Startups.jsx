@@ -6,6 +6,7 @@ import { getCurrentUser, listStartups } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
+import { DUR, EASE, stagger } from "../lib/motion";
 
 export default function Startups() {
   const [user, setUser] = useState(null);
@@ -57,7 +58,7 @@ export default function Startups() {
             marginBottom: 16,
           }}
         >
-          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               Startups
             </h1>
@@ -122,9 +123,9 @@ const chipStyle = {
 function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.44, delay: Math.min(index, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: DUR.base, delay: stagger(index), ease: EASE.out }}
     >
       <Link to={`/startup/${startup.id}`} className="block">
         <div className="app-card-interactive person-card">

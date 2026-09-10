@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
 import { resolvePhotoUrl } from "../lib/photoUrl";
+import { DUR, EASE } from "../lib/motion";
 
 const RATINGS = [
   { key: "great", emoji: "🔥", label: "Very useful" },
@@ -333,10 +334,10 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
   return (
     <Motion.div
       key="match-card"
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
-      transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: DUR.base, ease: EASE.out }}
       className="w-full max-w-full box-border rounded-[20px] overflow-hidden"
       style={{
         background: expanded ? "#FFFFFF" : "#FFFFFF",
@@ -457,7 +458,10 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+            transition={{
+              height: { duration: DUR.expand, ease: EASE.inOut },
+              opacity: { duration: DUR.expand * 0.75, delay: DUR.expand * 0.12, ease: "linear" },
+            }}
             style={{ overflow: "hidden" }}
           >
             <div style={{ padding: "16px 18px 0" }}>

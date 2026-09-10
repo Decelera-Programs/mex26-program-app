@@ -13,6 +13,7 @@ import {
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import { formatRelativeTime } from "../lib/dateTime";
+import { DUR, EASE, stagger } from "../lib/motion";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -278,9 +279,9 @@ export default function Notifications() {
               {notifications.map((notif, i) => (
                 <Motion.div
                   key={notif.id}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.44, delay: Math.min(i, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: DUR.base, delay: stagger(i), ease: EASE.out }}
                   style={{ opacity: notif.is_read ? 0.6 : 1 }}
                 >
                   <button

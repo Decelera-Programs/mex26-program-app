@@ -7,6 +7,7 @@ import { ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
+import { DUR, EASE } from "../lib/motion";
 
 // TODO: set the real Decelera México 2026 start date.
 const PROGRAM_START_DATE = "2026-05-23";
@@ -597,7 +598,10 @@ function GrowIn({ children }) {
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: "auto" }}
       exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        height: { duration: DUR.expand, ease: EASE.inOut },
+        opacity: { duration: DUR.expand * 0.75, delay: DUR.expand * 0.12, ease: "linear" },
+      }}
       onAnimationComplete={() => setOpen(true)}
       style={{ overflow: open ? "visible" : "hidden" }}
     >

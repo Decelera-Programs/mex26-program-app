@@ -7,6 +7,7 @@ import EventDetailsModal from "./EventDetailsModal";
 import PushNotificationPrompt from "./PushNotificationPrompt";
 import { getCurrentUser, listNotificationsForUser, markNotificationRead, signOut, unsubscribePush } from "../api/dataService";
 import { supabase } from "../lib/supabaseClient";
+import { DUR, EASE } from "../lib/motion";
 
 const navItems = [
   { path: "/home", icon: Home, label: "Home" },
@@ -318,9 +319,9 @@ export default function Layout() {
           <Suspense fallback={<LoadingState />}>
             <Motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: DUR.page, ease: EASE.out }}
               className="w-full"
             >
               <Outlet />

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { motion as Motion } from "framer-motion";
+import { DUR, EASE, stagger } from "../lib/motion";
 
 // Role -> label + the small dot colour next to it. Muted, evenly weighted;
 // the dot is the only colour on the card, everything else is neutral.
@@ -37,9 +38,9 @@ export default function PersonCard({ person, index = 0 }) {
 
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.44, delay: Math.min(index, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: DUR.base, delay: stagger(index), ease: EASE.out }}
     >
       <Link to={`/person/${person.id}`} className="block">
         <div className="app-card-interactive person-card">

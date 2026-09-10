@@ -1,13 +1,14 @@
 import { motion as Motion } from "framer-motion";
+import { DUR, EASE } from "../lib/motion";
 
 // Small, calm empty state — an outlined icon in a soft disc, a title and a
 // one-line hint. Used by the list pages instead of a bare line of grey text.
 export default function EmptyState({ icon: Icon, title, hint }) {
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: DUR.base, ease: EASE.out }}
       className="flex flex-col items-center text-center"
       style={{ padding: "56px 24px" }}
     >

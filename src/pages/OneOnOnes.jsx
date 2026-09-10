@@ -18,6 +18,7 @@ import {
 } from "../lib/dateTime";
 import LoadingState from "../components/LoadingState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
+import { DUR, EASE, stagger } from "../lib/motion";
 
 export default function OneOnOnes() {
   const navigate = useNavigate();
@@ -382,9 +383,9 @@ export default function OneOnOnes() {
                     return (
                       <Motion.div
                         key={item.id}
-                        initial={{ opacity: 0, y: 12 }}
+                        initial={{ opacity: 0, y: 18 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.44, delay: Math.min(animationIndex, 10) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                        transition={{ duration: DUR.base, delay: stagger(animationIndex), ease: EASE.out }}
                         className="rounded-[20px] border overflow-hidden"
                         style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}
                       >

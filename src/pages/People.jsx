@@ -8,6 +8,7 @@ import PersonCard from "../components/PersonCard";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from '../components/LoadingState'
 import EmptyState from "../components/EmptyState";
+import { DUR, EASE } from "../lib/motion";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -83,7 +84,7 @@ export default function People() {
             marginBottom: 16,
           }}
         >
-          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               People
             </h1>
