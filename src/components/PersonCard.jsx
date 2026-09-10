@@ -27,7 +27,7 @@ export default function PersonCard({ person, index = 0 }) {
     <Motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04 }}
+      transition={{ duration: 0.26, delay: Math.min(index, 12) * 0.035, ease: [0.23, 1, 0.32, 1] }}
     >
       <Link to={`/person/${person.id}`} className="block">
         <div

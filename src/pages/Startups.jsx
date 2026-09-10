@@ -110,7 +110,7 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
     <Motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04 }}
+      transition={{ duration: 0.26, delay: Math.min(index, 12) * 0.035, ease: [0.23, 1, 0.32, 1] }}
     >
       <Link to={`/startup/${startup.id}`} className="block">
         <div className="app-card-interactive person-card">

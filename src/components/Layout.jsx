@@ -152,6 +152,7 @@ export default function Layout() {
           <Link
             to="/notifications"
             aria-label="Notifications"
+            className="press-scale"
             style={{
               position: "absolute",
               top: "calc(env(safe-area-inset-top, 0px) + 10px)",
@@ -315,7 +316,15 @@ export default function Layout() {
           }}
         >
           <Suspense fallback={<LoadingState />}>
-            <Outlet />
+            <Motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              className="w-full"
+            >
+              <Outlet />
+            </Motion.div>
           </Suspense>
         </main>
 
@@ -346,15 +355,22 @@ export default function Layout() {
                 <Link
                   key={path}
                   to={path}
-                  className={`flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full transition-all duration-300 ${
+                  className={`press-scale relative flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full ${
                     isActive ? "text-white" : "text-muted-foreground"
                   }`}
-                  style={isActive ? { background: "#2D3852" } : undefined}
                 >
-                  <div className="p-0 rounded-xl">
+                  {isActive && (
+                    <Motion.span
+                      layoutId="nav-pill"
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: "#2D3852", zIndex: 0 }}
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <div className="relative z-[1] p-0 rounded-xl">
                     <NavIcon className="h-[18px] w-[18px] shrink-0" strokeWidth={isActive ? 2 : 1.8} color={isActive ? "#FFFFFF" : "#6E7892"} />
                   </div>
-                  <span className={`text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isActive ? "opacity-100" : "opacity-80"}`} style={{ color: isActive ? "#FFFFFF" : "#6E7892" }}>
+                  <span className={`relative z-[1] text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isActive ? "opacity-100" : "opacity-80"}`} style={{ color: isActive ? "#FFFFFF" : "#6E7892" }}>
                     {label}
                   </span>
                 </Link>
@@ -422,15 +438,23 @@ export default function Layout() {
               </AnimatePresence>
               <button
                 onClick={() => setAttendeesOpen((v) => !v)}
-                className={`flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full transition-all duration-300 ${
+                className={`press-scale relative flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full ${
                   isAttendeesActive ? "text-white" : "text-muted-foreground"
                 }`}
-                style={isAttendeesActive ? { background: "#2D3852" } : { background: "transparent", border: "none", outline: "none" }}
+                style={{ background: "transparent", border: "none", outline: "none" }}
               >
-                <div className="p-0 rounded-xl">
+                {isAttendeesActive && (
+                  <Motion.span
+                    layoutId="nav-pill"
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: "#2D3852", zIndex: 0 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  />
+                )}
+                <div className="relative z-[1] p-0 rounded-xl">
                   <Users className="h-[18px] w-[18px] shrink-0" strokeWidth={isAttendeesActive ? 2 : 1.8} color={isAttendeesActive ? "#FFFFFF" : "#6E7892"} />
                 </div>
-                <span className={`text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isAttendeesActive ? "opacity-100" : "opacity-80"}`} style={{ color: isAttendeesActive ? "#FFFFFF" : "#6E7892" }}>
+                <span className={`relative z-[1] text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isAttendeesActive ? "opacity-100" : "opacity-80"}`} style={{ color: isAttendeesActive ? "#FFFFFF" : "#6E7892" }}>
                   Attendees
                 </span>
               </button>
@@ -444,15 +468,22 @@ export default function Layout() {
                 <Link
                   key={path}
                   to={path}
-                  className={`flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full transition-all duration-300 ${
+                  className={`press-scale relative flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px] px-[4px] py-[8px] rounded-full ${
                     isActive ? "text-white" : "text-muted-foreground"
                   }`}
-                  style={isActive ? { background: "#2D3852" } : undefined}
                 >
-                  <div className="p-0 rounded-xl">
+                  {isActive && (
+                    <Motion.span
+                      layoutId="nav-pill"
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: "#2D3852", zIndex: 0 }}
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <div className="relative z-[1] p-0 rounded-xl">
                     <NavIcon className="h-[18px] w-[18px] shrink-0" strokeWidth={isActive ? 2 : 1.8} color={isActive ? "#FFFFFF" : "#6E7892"} />
                   </div>
-                  <span className={`text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isActive ? "opacity-100" : "opacity-80"}`} style={{ color: isActive ? "#FFFFFF" : "#6E7892" }}>
+                  <span className={`relative z-[1] text-[10px] font-medium tracking-[0.02em] text-center leading-tight truncate w-full px-0.5 ${isActive ? "opacity-100" : "opacity-80"}`} style={{ color: isActive ? "#FFFFFF" : "#6E7892" }}>
                     {label}
                   </span>
                 </Link>

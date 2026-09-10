@@ -30,6 +30,56 @@
 
   --border: 214 32% 91%;
   --radius: 1rem;
+
+  /* =========================================================================
+     Decelera brand tokens — single source of truth for the palette that is
+     currently hardcoded as hex across the JSX and the @layer components block.
+     Migrate call sites onto these incrementally (visual QA each surface).
+     ========================================================================= */
+
+  /* Core palette */
+  --dc-navy: #2d3852;        /* primary ink, dark surfaces, active nav */
+  --dc-cyan: #1fd0ef;        /* brand primary */
+  --dc-cyan-deep: #0a859b;   /* icon accents on light */
+  --dc-cyan-ink: #0c7a90;    /* text on cyan tints */
+  --dc-sand: #faf3dc;        /* warm hero / header variant */
+  --dc-amber: #ffb950;       /* alerts, "needs attention", 3rd schedule dot */
+  --dc-amber-strong: #ff9950;
+
+  /* Text */
+  --dc-text: #2d3852;        /* = navy */
+  --dc-text-body: #4a5573;   /* long-form body on light */
+  --dc-text-muted: #6e7892;  /* secondary / meta */
+  --dc-text-faint: #9aa3b8;  /* tertiary / captions */
+  --dc-text-placeholder: #b0bad0;
+
+  /* Surfaces */
+  --dc-surface: #f2f8fa;     /* app background (cool white) */
+  --dc-surface-card: #ffffff;
+  --dc-surface-cyan: #ecfafd;   /* cyan tint panel */
+  --dc-surface-cyan-soft: #e6f8fc;
+
+  /* Hairlines (light → slightly darker) */
+  --dc-line: #eef2f5;
+  --dc-line-200: #e4eaf0;
+  --dc-line-300: #e2e7ed;
+
+  /* Radii */
+  --dc-r-sm: 10px;
+  --dc-r-md: 14px;
+  --dc-r-lg: 20px;
+  --dc-r-xl: 24px;
+  --dc-r-pill: 9999px;
+
+  /* Elevation — replaces the ad-hoc box-shadows every card currently invents */
+  --dc-shadow-card: 0 4px 14px rgba(45, 56, 82, 0.06);
+  --dc-shadow-raised: 0 10px 30px rgba(45, 56, 82, 0.14), 0 1px 3px rgba(45, 56, 82, 0.06);
+  --dc-shadow-pop: 0 18px 40px rgba(45, 56, 82, 0.16);
+  --dc-shadow-glass: 0 12px 32px rgba(45, 56, 82, 0.1), 0 1px 2px rgba(45, 56, 82, 0.04);
+
+  /* Motion */
+  --dc-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --dc-ease-press: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @layer base {
@@ -1131,5 +1181,79 @@
   .dc-attn > .dc-attn-glow {
     animation: none;
     opacity: 0.42;
+  }
+}
+
+/* ===========================================================================
+   Global interaction polish
+   One tactile language across the whole app — inline-styled buttons, Tailwind
+   buttons and .app-card-interactive alike. Components that set their own inline
+   transition/transform still win where they need to.
+   =========================================================================== */
+
+/* Kill the native grey/blue tap flash on mobile — we provide our own feedback. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.24);
+}
+
+button,
+[role="button"],
+summary,
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  cursor: pointer;
+}
+
+/* A snappy easing so the pressed state below has something to animate against,
+   for the many buttons that don't set their own transition inline. */
+button,
+[role="button"] {
+  transition: transform 0.14s var(--dc-ease-press), filter 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"] {
+  cursor: default;
+}
+
+/* Pressed: a small give + a touch dimmer. */
+button:not(:disabled):not([aria-disabled="true"]):active,
+[role="button"]:not([aria-disabled="true"]):active,
+a.press-scale:active,
+.press-scale:active {
+  transform: scale(0.97);
+  filter: brightness(0.96);
+}
+
+/* Keyboard focus only — never a ring on mouse/touch press. */
+:focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.9);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Honour the OS "reduce motion" setting app-wide. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

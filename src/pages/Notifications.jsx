@@ -280,7 +280,7 @@ export default function Notifications() {
                   key={notif.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
+                  transition={{ duration: 0.26, delay: Math.min(i, 12) * 0.035, ease: [0.23, 1, 0.32, 1] }}
                   style={{ opacity: notif.is_read ? 0.6 : 1 }}
                 >
                   <button
