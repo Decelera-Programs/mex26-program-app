@@ -113,6 +113,9 @@ export default function Home() {
   const [myOneOnOnesCount, setMyOneOnOnesCount] = useState(0);
   const [todayMatch, setTodayMatch] = useState(null);
   const [pendingMatches, setPendingMatches] = useState([]);
+  // The match + 1:1 cards depend on a fetch; hold their slots with a skeleton
+  // until it resolves so the rest of the page doesn't jump when they mount.
+  const [homeLoading, setHomeLoading] = useState(true);
   const [engagedMatchIds, setEngagedMatchIds] = useState(() => new Set());
   const [oneOnOneVisitedToday, setOneOnOneVisitedToday] = useState(() => oneOnOnesVisitedOn(getTodayKey()));
   const [highlightMatchId, setHighlightMatchId] = useState(null);
@@ -175,6 +178,7 @@ export default function Home() {
         }
         const oneOnOnes = Array.isArray(oneOnOnesData) ? oneOnOnesData : [];
         setMyOneOnOnesCount(oneOnOnes.length);
+        setHomeLoading(false);
 
         if (oneOnOnes.length > 0 && userData?.contact_type === "experience_maker") {
           const audioResults = await Promise.all(
@@ -186,6 +190,8 @@ export default function Home() {
         }
       } catch {
         if (!cancelled) setHeroContent(FALLBACK_HERO_CONTENT);
+      } finally {
+        if (!cancelled) setHomeLoading(false);
       }
     }
 
@@ -218,7 +224,6 @@ export default function Home() {
   // Arrived from a match notification (?match=<id>): remember which card to
   // reveal, then drop the param so a refresh doesn't re-trigger. Reading a URL
   // param into state once on arrival is a legitimate effect use here.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const wanted = searchParams.get("match");
     if (!wanted) return;
@@ -233,7 +238,6 @@ export default function Home() {
       { replace: true },
     );
   }, [searchParams, setSearchParams]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Once the highlighted match card is actually in the DOM, scroll it into view.
   useEffect(() => {
@@ -387,8 +391,10 @@ export default function Home() {
             }}
           />
         ) : null}
-        <AnimatePresence>
-        {todayMatch ? (
+        <AnimatePresence initial={false}>
+        {homeLoading ? (
+          <HomeCardSkeleton key="match-skeleton" h={118} />
+        ) : todayMatch ? (
           <AttentionWrap
             key={`wrap-${todayMatch.id}`}
             pulse={!engagedMatchIds.has(todayMatch.id)}
@@ -401,7 +407,7 @@ export default function Home() {
             />
           </AttentionWrap>
         ) : null}
-        {pendingMatches.map((m) => (
+        {!homeLoading && pendingMatches.map((m) => (
           <AttentionWrap key={`wrap-${m.id}`} pulse={!engagedMatchIds.has(m.id) && !m.my_feedback}>
             <MatchCard
               match={m}
@@ -414,8 +420,10 @@ export default function Home() {
         ))}
         </AnimatePresence>
 
-        <AnimatePresence>
-        {myOneOnOnesCount > 0 ? (
+        <AnimatePresence initial={false}>
+        {homeLoading ? (
+          <HomeCardSkeleton key="one-on-ones-skeleton" h={74} />
+        ) : myOneOnOnesCount > 0 ? (
           <AttentionWrap
             key="one-on-ones-wrap"
             pulse={myOneOnOnesWithoutAudio > 0 && !oneOnOneVisitedToday}
@@ -582,6 +590,19 @@ export default function Home() {
         </a>
       </div>
     </div>
+  );
+}
+
+// Holds a card slot while its data loads, at roughly the height the real card
+// will be — so when the fetch resolves the card mounts (or the slot clears)
+// with next to no layout shift, instead of popping in and shoving the page.
+function HomeCardSkeleton({ h = 88 }) {
+  return (
+    <div
+      className="dc-skeleton w-full rounded-[20px]"
+      style={{ height: h }}
+      aria-hidden="true"
+    />
   );
 }
 
