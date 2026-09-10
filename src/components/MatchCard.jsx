@@ -440,7 +440,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                     marginBottom: 10,
                   }}
                 >
-                  Pregúntale
+                  {isFounder ? "Pregúntale" : "Qué te podría preguntar"}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                   {questions.map((q, i) => {

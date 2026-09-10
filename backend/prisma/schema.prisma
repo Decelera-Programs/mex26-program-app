@@ -50,7 +50,6 @@ model Person {
   /// scoring. Shape: { hash, model, vector }. Recomputed only when the source text changes.
   embedding      Json?
   schedule_feedback           Json?
-  daily_checkin               Json?
   post_program_expectations   Json?
   fun_fact       String?
   dni            String?

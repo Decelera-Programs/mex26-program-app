@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCurrentUser, getHomeDailyContent, getMyDailyCheckin, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople, submitMyDailyCheckin } from "../api/dataService";
+import { getCurrentUser, getHomeDailyContent, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople } from "../api/dataService";
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
-import { Leaf, ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
@@ -37,12 +37,6 @@ function dateKeyInProgramTz(raw) {
   if (Number.isNaN(d.getTime())) return null;
   return new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(d);
 }
-
-const CHECKIN_QUESTIONS = [
-  { id: "energy",     prompt: "What kind of energy are you carrying today?",          kind: "scale", anchors: ["Drained",     "Energized"]  },
-  { id: "clarity",    prompt: "How clear does your thinking feel right now?",         kind: "scale", anchors: ["Overwhelmed", "Clear"]     },
-  { id: "connection", prompt: "How connected do you feel to the people around you?",  kind: "scale", anchors: ["Isolated",    "Connected"]  },
-];
 
 // "Needs attention" pulse state, remembered in localStorage so a reload doesn't
 // re-pulse a card the user already dealt with.
@@ -135,13 +129,6 @@ export default function Home() {
     });
   };
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
-  const [checkinOpen, setCheckinOpen] = useState(false);
-  const [checkinDone, setCheckinDone] = useState(false);
-  const [checkinStep, setCheckinStep] = useState(0);
-  const [checkinBusy, setCheckinBusy] = useState(false);
-  const [checkinError, setCheckinError] = useState("");
-  const [checkinAnswers, setCheckinAnswers] = useState({});
-  const checkinOpenRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,9 +136,8 @@ export default function Home() {
 
     async function loadHomeData() {
       try {
-        const [homeData, checkinData, peopleData, oneOnOnesData, userData, matchData] = await Promise.all([
+        const [homeData, peopleData, oneOnOnesData, userData, matchData] = await Promise.all([
           getHomeDailyContent(todayKey).catch(() => null),
-          getMyDailyCheckin(todayKey).catch(() => null),
           listPeople().catch(() => []),
           listMyOneOnOnes().catch(() => []),
           getCurrentUser().catch(() => null),
@@ -184,10 +170,6 @@ export default function Home() {
             duration: homeData.podcast_duration_sec || null,
           });
         }
-        if (checkinData?.already_submitted) {
-          setCheckinDone(true);
-        }
-
         if (Array.isArray(peopleData) && peopleData.length) {
           setPeoplePreview(peopleData);
         }
@@ -234,7 +216,9 @@ export default function Home() {
   }, []);
 
   // Arrived from a match notification (?match=<id>): remember which card to
-  // reveal, then drop the param so a refresh doesn't re-trigger.
+  // reveal, then drop the param so a refresh doesn't re-trigger. Reading a URL
+  // param into state once on arrival is a legitimate effect use here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const wanted = searchParams.get("match");
     if (!wanted) return;
@@ -249,6 +233,7 @@ export default function Home() {
       { replace: true },
     );
   }, [searchParams, setSearchParams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Once the highlighted match card is actually in the DOM, scroll it into view.
   useEffect(() => {
@@ -262,67 +247,6 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [highlightMatchId, todayMatch, pendingMatches]);
 
-  useEffect(() => {
-    if (!checkinOpen) return;
-
-    function handleOutsidePointerDown(event) {
-      const target = event.target;
-      if (checkinOpenRef.current && !checkinOpenRef.current.contains(target)) {
-        setCheckinOpen(false);
-        setCheckinStep(0);
-        setCheckinError("");
-      }
-    }
-
-    document.addEventListener("mousedown", handleOutsidePointerDown);
-    document.addEventListener("touchstart", handleOutsidePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsidePointerDown);
-      document.removeEventListener("touchstart", handleOutsidePointerDown);
-    };
-  }, [checkinOpen]);
-
-  async function submitCheckin(answers) {
-    const todayKey = getTodayKey();
-    const payload = {
-      energy:     Number(answers.energy),
-      clarity:    Number(answers.clarity),
-      connection: Number(answers.connection),
-    };
-    if (!payload.energy || !payload.clarity || !payload.connection) {
-      setCheckinError("Please complete all answers.");
-      return;
-    }
-    setCheckinBusy(true);
-    setCheckinError("");
-    try {
-      await submitMyDailyCheckin(todayKey, payload);
-      setCheckinDone(true);
-      setCheckinOpen(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not save your check-in.";
-      setCheckinError(message.includes("already submitted") ? "Today's check-in is already completed." : message);
-      if (message.includes("already submitted")) {
-        setCheckinDone(true);
-        setCheckinOpen(false);
-      }
-    } finally {
-      setCheckinBusy(false);
-    }
-  }
-
-  function setStepAnswer(questionId, value) {
-    const next = { ...checkinAnswers, [questionId]: value };
-    setCheckinAnswers(next);
-    if (checkinStep < CHECKIN_QUESTIONS.length - 1) {
-      setTimeout(() => setCheckinStep((prev) => prev + 1), 220);
-    } else {
-      setTimeout(() => submitCheckin(next), 220);
-    }
-  }
-
-  const currentQuestion = CHECKIN_QUESTIONS[checkinStep];
-  const totalQuestions = CHECKIN_QUESTIONS.length;
   const todaysEvents = useMemo(() => {
     const todayKey = getTodayKey();
     return [...events]
@@ -540,116 +464,6 @@ export default function Home() {
           </Motion.button>
           </AttentionWrap>
         ) : null}
-        </AnimatePresence>
-
-        <AnimatePresence initial={false} mode="wait">
-        {checkinDone ? null : checkinOpen ? (
-          <Motion.section
-            ref={checkinOpenRef}
-            key="checkin-open"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="mt-2 box-border max-w-full rounded-[20px] border px-[18px] pt-[18px] pb-[16px]"
-            style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}
-          >
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span className="uppercase" style={{ fontSize: "11px", letterSpacing: "0.14em", color: "#0A859B", fontWeight: 500 }}>
-                  Daily check-in
-                </span>
-                <div className="flex-1 flex items-center gap-1">
-                  {CHECKIN_QUESTIONS.map((_, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        flex: 1,
-                        height: "3px",
-                        borderRadius: 99,
-                        background: i <= checkinStep ? "#1FD0EF" : "#E2E7ED",
-                        transition: "background 240ms cubic-bezier(.16,1,.3,1)",
-                      }}
-                    />
-                  ))}
-                </div>
-                <span style={{ fontSize: "10.5px", color: "#6E7892", minWidth: 22, textAlign: "right" }}>
-                  {checkinStep + 1}/{totalQuestions}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  fontFamily: "Taviraj, serif",
-                  fontWeight: 300,
-                  fontSize: "20px",
-                  lineHeight: 1.25,
-                  color: "#2D3852",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {currentQuestion.prompt}
-              </div>
-              <div style={{ marginTop: "4px" }}>
-                <ScaleAnswer
-                  value={checkinAnswers[currentQuestion.id]}
-                  onPick={(n) => setStepAnswer(currentQuestion.id, n)}
-                  anchors={currentQuestion.anchors}
-                />
-              </div>
-
-              {checkinError ? <p style={{ fontSize: "11px", color: "#D9534F" }}>{checkinError}</p> : null}
-            </div>
-          </Motion.section>
-        ) : (
-          <Motion.button
-            key="checkin-closed"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            type="button"
-            onClick={() => setCheckinOpen(true)}
-            className="mt-2 box-border max-w-full rounded-[20px] border px-[18px] pt-[12px] pb-[14px] text-left w-full transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
-            style={{
-              background: "#FFFFFF",
-              borderColor: "#EEF2F5",
-            }}
-          >
-            <div className="flex items-center gap-[14px]">
-              <div
-                className="h-[42px] w-[42px] shrink-0 rounded-full flex items-center justify-center"
-                style={{ background: "#ECFAFD", color: "#0A859B" }}
-              >
-                <Leaf size={20} />
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <span
-                  className="uppercase"
-                  style={{
-                    fontSize: "11px",
-                    letterSpacing: "0.14em",
-                    fontWeight: 500,
-                    color: "#0A859B",
-                  }}
-                >
-                  Daily check-in
-                </span>
-                <p style={{ fontSize: "14px", fontWeight: 500, color: "#2D3852", marginTop: "2px", marginBottom: 0 }}>
-                  How are you feeling today?
-                </p>
-              </div>
-
-              <div
-                className="h-[30px] w-[30px] shrink-0 rounded-full flex items-center justify-center"
-                style={{ background: "#1FD0EF", color: "#2D3852" }}
-              >
-                <ArrowRight size={14} strokeWidth={2} />
-              </div>
-            </div>
-          </Motion.button>
-        )}
         </AnimatePresence>
 
         <button
@@ -1152,171 +966,6 @@ function SponsorsSection() {
         </div>
       </div>
       <style>{`@keyframes sponsorScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
-    </div>
-  );
-}
-
-function ScaleAnswer({ value, onPick, anchors }) {
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 6 }}>
-        {[1, 2, 3, 4, 5].map((n) => {
-          const active = value === n;
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onPick(n)}
-              style={{
-                flex: 1,
-                height: 46,
-                borderRadius: 14,
-                border: `1px solid ${active ? "#1FD0EF" : "#E2E7ED"}`,
-                background: active ? "#1FD0EF" : "#fff",
-                color: active ? "#2D3852" : "#4A5573",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 160ms cubic-bezier(.16,1,.3,1)",
-              }}
-            >
-              {n}
-            </button>
-          );
-        })}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginTop: 8,
-          fontSize: 10.5,
-          color: "#6E7892",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-        }}
-      >
-        <span>{anchors[0]}</span>
-        <span>{anchors[1]}</span>
-      </div>
-    </div>
-  );
-}
-
-function WordAnswer({ value, onSubmit, placeholder }) {
-  const [v, setV] = useState(value || "");
-  const ok = v.trim().length > 0 && v.trim().split(/\s+/).length <= 3;
-  return (
-    <div>
-      <input
-        autoFocus
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && ok) onSubmit(v.trim());
-        }}
-        placeholder={placeholder}
-        style={{
-          width: "100%",
-          boxSizing: "border-box",
-          background: "#F2F8FA",
-          border: "1px solid #E2E7ED",
-          borderRadius: 14,
-          padding: "14px 16px",
-          fontFamily: "Taviraj, serif",
-          fontWeight: 300,
-          fontSize: 20,
-          color: "#2D3852",
-          letterSpacing: "-0.01em",
-          outline: "none",
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => ok && onSubmit(v.trim())}
-        disabled={!ok}
-        style={{
-          marginTop: 10,
-          width: "100%",
-          padding: "12px 16px",
-          borderRadius: 999,
-          border: "none",
-          cursor: ok ? "pointer" : "not-allowed",
-          background: ok ? "#2D3852" : "#E2E7ED",
-          color: ok ? "#fff" : "#6E7892",
-          fontSize: 13,
-          fontWeight: 600,
-          transition: "all 160ms cubic-bezier(.16,1,.3,1)",
-        }}
-      >
-        That's the word
-      </button>
-    </div>
-  );
-}
-
-function ReflectAnswer({ value, onSubmit, placeholder, busy }) {
-  const [v, setV] = useState(value || "");
-  return (
-    <div>
-      <textarea
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-        placeholder={placeholder}
-        rows={4}
-        style={{
-          width: "100%",
-          boxSizing: "border-box",
-          resize: "none",
-          background: "#F2F8FA",
-          border: "1px solid #E2E7ED",
-          borderRadius: 14,
-          padding: "12px 14px",
-          fontSize: 13.5,
-          lineHeight: 1.5,
-          color: "#2D3852",
-          outline: "none",
-        }}
-      />
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button
-          type="button"
-          onClick={() => onSubmit("__notebook__")}
-          disabled={busy}
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 999,
-            border: "1px solid #E2E7ED",
-            background: "#fff",
-            color: "#4A5573",
-            cursor: "pointer",
-            fontSize: 12.5,
-            fontWeight: 500,
-          }}
-        >
-          I'll write in my notebook
-        </button>
-        <button
-          type="button"
-          onClick={() => onSubmit(v.trim() || "__skipped__")}
-          disabled={busy}
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 999,
-            border: "none",
-            background: "#2D3852",
-            color: "#fff",
-            cursor: "pointer",
-            fontSize: 12.5,
-            fontWeight: 600,
-            opacity: busy ? 0.7 : 1,
-          }}
-        >
-          {busy ? "Saving..." : "Save reflection"}
-        </button>
-      </div>
     </div>
   );
 }

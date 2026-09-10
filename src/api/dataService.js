@@ -359,19 +359,6 @@ export async function getMyScheduleDayFeedback(dayKey) {
   return ratings;
 }
 
-export async function getMyDailyCheckin(dayKey) {
-  if (!dayKey) return null;
-  return api(`/check-in/daily/${encodeURIComponent(dayKey)}`);
-}
-
-export async function submitMyDailyCheckin(dayKey, payload) {
-  if (!dayKey) return null;
-  return api(`/check-in/daily/${encodeURIComponent(dayKey)}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
 export async function setMyScheduleEventFeedback(dayKey, eventId, rating) {
   if (!dayKey || !eventId) return {};
   const payload = await api(`/feedback/schedule/${encodeURIComponent(dayKey)}`, {

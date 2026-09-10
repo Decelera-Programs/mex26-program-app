@@ -243,7 +243,6 @@ const personSafeSelect = {
   departure_date: true,
   expertise_tags: true,
   schedule_feedback: true,
-  daily_checkin: true,
   startup_id: true,
   post_program_expectations: true,
   fun_fact: true,
@@ -1728,15 +1727,6 @@ function toScheduleFeedbackObject(raw: unknown) {
         value <= 5,
     ),
   ) as Record<string, number>;
-}
-
-function toDailyCheckinObject(raw: unknown) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  return raw as Record<string, unknown>;
-}
-
-function dailyCheckinKey(dayKey: string) {
-  return `pregunta_${dayKey}`;
 }
 
 function slugifyEventTitle(rawTitle: string) {
@@ -3306,96 +3296,6 @@ app.put("/feedback/schedule/:dayKey", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save schedule feedback" });
-  }
-});
-
-app.get("/check-in/daily/:dayKey", async (req, res) => {
-  try {
-    const auth = (req as AuthenticatedRequest).auth;
-    if (!auth?.email || !auth?.sub) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    const parsedDay = parseScheduleDayKey(z.string().parse(req.params.dayKey));
-    if (!parsedDay) {
-      res.status(400).json({ error: "Invalid day key. Expected YYYY-MM-DD" });
-      return;
-    }
-    const person = await resolvePersonFromAuth(auth);
-    if (!person) {
-      res.status(403).json({ error: "No person record linked to this email" });
-      return;
-    }
-    const key = dailyCheckinKey(parsedDay.dayKey);
-    const checkin = toDailyCheckinObject(person.daily_checkin);
-    res.json({
-      day: parsedDay.dayKey,
-      key,
-      already_submitted: key in checkin,
-      result: (checkin[key] as Record<string, unknown> | undefined) || null,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load daily check-in" });
-  }
-});
-
-app.put("/check-in/daily/:dayKey", async (req, res) => {
-  try {
-    const auth = (req as AuthenticatedRequest).auth;
-    if (!auth?.email || !auth?.sub) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    personResolutionCache.delete(auth.sub);
-    const parsedDay = parseScheduleDayKey(z.string().parse(req.params.dayKey));
-    if (!parsedDay) {
-      res.status(400).json({ error: "Invalid day key. Expected YYYY-MM-DD" });
-      return;
-    }
-    const parsedBody = z
-      .object({
-        energy:     z.number().int().min(1).max(5),
-        clarity:    z.number().int().min(1).max(5),
-        connection: z.number().int().min(1).max(5),
-      })
-      .safeParse(req.body);
-    if (!parsedBody.success) {
-      res.status(400).json({ error: "Invalid daily check-in payload" });
-      return;
-    }
-    const person = await resolvePersonFromAuth(auth);
-    if (!person) {
-      res.status(403).json({ error: "No person record linked to this email" });
-      return;
-    }
-
-    const key = dailyCheckinKey(parsedDay.dayKey);
-    const checkin = toDailyCheckinObject(person.daily_checkin);
-    if (key in checkin) {
-      res.status(409).json({ error: "Daily check-in already submitted for this day", key });
-      return;
-    }
-
-    checkin[key] = {
-      ...parsedBody.data,
-      submitted_at: new Date().toISOString(),
-    };
-
-    const updated = await prisma.person.update({
-      where: { id: person.id },
-      data: { daily_checkin: checkin as Prisma.InputJsonValue },
-      select: { daily_checkin: true },
-    });
-
-    const stored = toDailyCheckinObject(updated.daily_checkin);
-    res.json({
-      ok: true,
-      day: parsedDay.dayKey,
-      key,
-      result: (stored[key] as Record<string, unknown> | undefined) || null,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save daily check-in" });
   }
 });
 
