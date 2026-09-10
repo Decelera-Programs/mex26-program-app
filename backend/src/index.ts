@@ -204,7 +204,7 @@ const MATCH_FEEDBACK_REMINDER_HOUR = 20;
 const MATCH_FEEDBACK_PENDING_DAYS = 2;
 // Push/notification copy for a fresh daily match. Deliberately a teaser — the
 // details (counterpart, topic, questions) live on the card the user opens.
-const MATCH_NOTIFICATION_TEXT = "Tenemos una sugerencia que te podría interesar!!";
+const MATCH_NOTIFICATION_TEXT = "We've got a suggestion you might like!";
 
 const campaignFiltersSchema = z
   .object({
@@ -1127,20 +1127,20 @@ async function writeMatchTopic(
           {
             role: "system",
             content:
-              "Eres el asistente de conexiones informales del programa Decelera Mexico 2026. " +
-              "Se te da un founder con su reto vivo y un experience maker con el que YA esta emparejado para hoy. " +
-              "El founder deberia hablar con el de forma informal (en una pausa o comida, SIN agendar reunion) " +
-              "para una conversacion corta y util. Todo en espanol, concreto, nada generico, anclado en el reto " +
-              "real del founder y en algo especifico del expertise o la experiencia de ese EM. Genera: " +
-              "1) \"topic\": max 140 caracteres. UN tema accionable del que hablar. " +
-              "2) \"why\": array de 2 o 3 strings, max 110 caracteres cada uno. Por que tiene sentido esta pareja " +
-              "(cita el reto del founder y algo concreto del EM). " +
-              "3) \"questions\": array de EXACTAMENTE 3 strings, max 130 caracteres cada una. Preguntas concretas " +
-              "que el founder puede hacerle, ancladas en el reto. " +
-              "4) \"opener\": max 150 caracteres. Frase en primera persona que el founder pueda decirle literalmente " +
-              "para arrancar de forma natural e informal. " +
-              "5) \"em_blurb\": max 130 caracteres. Una linea, orientada AL EM, diciendo que quiere el founder de el. " +
-              'Responde SOLO un JSON con este formato exacto: ' +
+              "You are the informal-connections assistant for the Decelera Mexico 2026 program. " +
+              "You are given a founder with a live challenge and an experience maker they are ALREADY paired with for today. " +
+              "The founder should talk to them informally (in a break or over a meal, WITHOUT booking a meeting) " +
+              "for a short, useful conversation. Write everything in English, concrete, nothing generic, anchored in the " +
+              "founder's real challenge and in something specific about that EM's expertise or experience. Produce: " +
+              "1) \"topic\": max 140 characters. ONE actionable thing to talk about. " +
+              "2) \"why\": array of 2 or 3 strings, max 110 characters each. Why this pairing makes sense " +
+              "(cite the founder's challenge and something concrete about the EM). " +
+              "3) \"questions\": array of EXACTLY 3 strings, max 130 characters each. Concrete questions " +
+              "the founder can ask them, anchored in the challenge. " +
+              "4) \"opener\": max 150 characters. A first-person line the founder can say verbatim " +
+              "to start naturally and informally. " +
+              "5) \"em_blurb\": max 130 characters. One line, aimed AT the EM, saying what the founder wants from them. " +
+              'Respond with ONLY a JSON object in exactly this shape: ' +
               '{"topic": string, "why": string[], "questions": string[], "opener": string, "em_blurb": string}.',
           },
           { role: "user", content: JSON.stringify({ founder: founderContext, experience_maker: emContext }) },
@@ -1201,26 +1201,26 @@ function fallbackMatchTopic(
       ...emTags.filter((t) => founderTags.includes(t)),
     ]),
   );
-  const emFirstName = (em.full_name || "").trim().split(/\s+/)[0] || "este EM";
-  const startupName = founder.startup?.name || "tu startup";
-  const focus = shared.slice(0, 2).join(" y ") || "un reto que tienes ahora mismo";
+  const emFirstName = (em.full_name || "").trim().split(/\s+/)[0] || "this EM";
+  const startupName = founder.startup?.name || "your startup";
+  const focus = shared.slice(0, 2).join(" and ") || "a challenge you're facing right now";
   const topic =
     shared.length > 0
-      ? `Habla con ${emFirstName} sobre ${shared.slice(0, 3).join(", ")}: es su area.`
-      : `Contrasta tu reto actual con ${emFirstName}, tenéis expertise complementario.`;
+      ? `Talk to ${emFirstName} about ${shared.slice(0, 3).join(", ")}: it's their area.`
+      : `Compare notes on your current challenge with ${emFirstName} — your expertise is complementary.`;
   return {
     topic,
-    opener: `Hola ${emFirstName}, estoy dándole vueltas a ${focus} y creo que tú has pasado por esto. ¿Tienes un momento en la próxima pausa?`,
+    opener: `Hi ${emFirstName}, I've been chewing on ${focus} and I think you've been through this. Got a minute at the next break?`,
     why:
       shared.length > 0
-        ? [`Solapáis en: ${shared.slice(0, 3).join(", ")}`, `${emFirstName} ya ha trabajado en esa área`]
-        : [`Expertise complementario para tu reto actual`],
+        ? [`You overlap on: ${shared.slice(0, 3).join(", ")}`, `${emFirstName} has already worked in that area`]
+        : [`Complementary expertise for your current challenge`],
     questions: [
-      `¿Cómo abordaste ${shared[0] || "esto"} en tu experiencia?`,
-      `¿Qué harías distinto si empezaras de cero?`,
-      `¿Con quién más deberíamos hablar sobre esto?`,
+      `How did you approach ${shared[0] || "this"} in your own experience?`,
+      `What would you do differently if you started from scratch?`,
+      `Who else should we be talking to about this?`,
     ],
-    em_blurb: `${(founder.full_name || "Un founder").split(/\s+/)[0]} (${startupName}) quiere tu perspectiva sobre ${focus}.`,
+    em_blurb: `${(founder.full_name || "A founder").split(/\s+/)[0]} (${startupName}) wants your perspective on ${focus}.`,
   };
 }
 
@@ -1620,8 +1620,8 @@ async function runMatchFeedbackReminders(now = new Date()) {
           : {};
 
       const sides: Array<{ role: "founder" | "em"; userId: string; counterpart: string }> = [
-        { role: "founder", userId: match.founder_id, counterpart: match.em?.full_name || "tu Experience Maker" },
-        { role: "em", userId: match.em_id, counterpart: match.founder?.full_name || "el founder" },
+        { role: "founder", userId: match.founder_id, counterpart: match.em?.full_name || "your Experience Maker" },
+        { role: "em", userId: match.em_id, counterpart: match.founder?.full_name || "the founder" },
       ];
 
       const patch: Record<string, string> = {};
@@ -1633,7 +1633,7 @@ async function runMatchFeedbackReminders(now = new Date()) {
           data: {
             id: crypto.randomUUID(),
             user_id: side.userId,
-            message: `¿Hablaste hoy con ${firstName}? Cuéntanos qué tal, son 2 toques.`,
+            message: `Did you catch up with ${firstName} today? Tell us how it went — 2 taps.`,
             sent_at: now,
             match_id: match.id,
           },

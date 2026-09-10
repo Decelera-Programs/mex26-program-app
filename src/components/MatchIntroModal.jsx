@@ -147,7 +147,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
                 color: "#7FE3F4",
               }}
             >
-              Tu conexión de hoy
+              Today&apos;s connection
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
@@ -181,7 +181,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
                   fontWeight: 600,
                 }}
               >
-                Hablad de
+                Talk about
               </div>
               <div
                 style={{
@@ -198,8 +198,8 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
             </div>
           )}
           <p style={{ margin: "14px 0 0", fontSize: 12.5, color: "#6E7892", lineHeight: 1.5 }}>
-            Buscaos en algún momento del día y tened esa conversación. Sin agenda, informal — es una
-            recomendación, no un evento.
+            Find a moment during the day and have that conversation. No agenda, informal — it&apos;s a
+            suggestion, not an event.
           </p>
 
           <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
@@ -219,7 +219,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
                 cursor: "pointer",
               }}
             >
-              Ver detalles
+              See details
             </button>
             <button
               type="button"
@@ -236,7 +236,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
                 cursor: "pointer",
               }}
             >
-              Vale
+              Got it
             </button>
           </div>
         </div>

@@ -4,16 +4,16 @@ import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
 import { resolvePhotoUrl } from "../lib/photoUrl";
 
 const RATINGS = [
-  { key: "great", emoji: "🔥", label: "Muy útil" },
-  { key: "good", emoji: "👍", label: "Estuvo bien" },
-  { key: "meh", emoji: "😐", label: "No aportó" },
+  { key: "great", emoji: "🔥", label: "Very useful" },
+  { key: "good", emoji: "👍", label: "Went well" },
+  { key: "meh", emoji: "😐", label: "Not much" },
 ];
 
 const TAKEAWAYS = [
-  { key: "idea", label: "Una idea" },
-  { key: "contact", label: "Un contacto" },
-  { key: "perspective", label: "Otra perspectiva" },
-  { key: "collab", label: "Posible colaboración" },
+  { key: "idea", label: "An idea" },
+  { key: "contact", label: "A contact" },
+  { key: "perspective", label: "A new angle" },
+  { key: "collab", label: "A possible collaboration" },
 ];
 
 function dayLabel(raw) {
@@ -23,8 +23,8 @@ function dayLabel(raw) {
   const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diff = Math.round((startOf(new Date()) - startOf(then)) / 86400000);
   if (diff <= 0) return "";
-  if (diff === 1) return "ayer";
-  return `hace ${diff} días`;
+  if (diff === 1) return "yesterday";
+  return `${diff} days ago`;
 }
 
 function ChevronIcon({ dir = "down", color = "#6E7892" }) {
@@ -93,7 +93,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
   const [fb, setFb] = useState(match?.my_feedback ?? null);
   const [fbStep, setFbStep] = useState("talked"); // talked | rating | takeaway
   const [pendingRating, setPendingRating] = useState(null);
-  const [dismissed, setDismissed] = useState(false); // "Todavía no" — soft, not persisted
+  const [dismissed, setDismissed] = useState(false); // "Not yet" — soft, not persisted
   const [connectSent, setConnectSent] = useState(Boolean(match?.my_connect));
   const [busy, setBusy] = useState(false);
 
@@ -157,15 +157,15 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
   }
 
   const metaLine = settled
-    ? "Feedback enviado · gracias"
-    : `${questions.length} pregunta${questions.length === 1 ? "" : "s"} lista${questions.length === 1 ? "" : "s"}${
-        isFounder && opener ? " · 1 frase para arrancar" : ""
+    ? "Feedback sent · thanks"
+    : `${questions.length} question${questions.length === 1 ? "" : "s"} ready${
+        isFounder && opener ? " · 1 opener line" : ""
       }`;
 
-  // Three-step feedback — "¿hablasteis?" -> "¿qué tal?" -> "¿qué sacaste?" (only
-  // after a good/great rating). This is the highest-weight block on the card once
-  // there's something to rate, so it always gets its own colored section with big
-  // tap targets, never a thin strip of small pills.
+  // Three-step feedback — "did you talk?" -> "how did it go?" -> "what did you take
+  // away?" (only after a good/great rating). This is the highest-weight block on the
+  // card once there's something to rate, so it always gets its own colored section
+  // with big tap targets, never a thin strip of small pills.
   function renderFeedback(dark) {
     const cardColor = dark ? "#FFFFFF" : "#2D3852";
     const subColor = dark ? "rgba(255,255,255,0.6)" : "#6E7892";
@@ -205,10 +205,10 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
     if (settled) {
       const thanks =
         fb.talked === "wont"
-          ? "Anotado, gracias."
+          ? "Noted, thanks."
           : fb.rating === "meh"
-            ? "Gracias por el feedback."
-            : "Gracias — nos alegra que sirviera.";
+            ? "Thanks for the feedback."
+            : "Glad it helped — thanks.";
       return (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 18 }}>{fb.talked === "wont" ? "👌" : fb.rating === "meh" ? "🙏" : "🎉"}</span>
@@ -219,7 +219,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
 
     if (dismissed) {
       return (
-        <span style={{ fontSize: 12, color: subColor }}>Vale, te lo preguntamos más tarde.</span>
+        <span style={{ fontSize: 12, color: subColor }}>OK, we&apos;ll ask again later.</span>
       );
     }
 
@@ -227,10 +227,10 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>
-            ¿Hablaste con {counterpart.full_name?.split(/\s+/)[0] || "él/ella"}?
+            Did you talk with {counterpart.full_name?.split(/\s+/)[0] || "them"}?
           </span>
           <button type="button" disabled={busy} style={bigButton(true)} onClick={() => setFbStep("rating")}>
-            Sí, hablamos
+            Yes, we talked
           </button>
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -242,7 +242,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                 setDismissed(true);
               }}
             >
-              Todavía no
+              Not yet
             </button>
             <button
               type="button"
@@ -250,7 +250,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
               style={{ ...bigButton(false), flex: 1, opacity: 0.75 }}
               onClick={() => sendFeedback({ talked: "wont" })}
             >
-              No va a poder ser
+              Won&apos;t happen
             </button>
           </div>
         </div>
@@ -260,7 +260,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
     if (fbStep === "rating") {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>¿Qué tal fue?</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>How did it go?</span>
           <div style={{ display: "flex", gap: 8 }}>
             {RATINGS.map((r) => (
               <button
@@ -295,7 +295,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
     // takeaway (optional, only reached after a "great"/"good" rating)
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>¿Qué sacaste?</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: cardColor }}>What did you take away?</span>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
           {TAKEAWAYS.map((t) => (
             <button
@@ -324,7 +324,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
           style={softLink}
           onClick={() => sendFeedback({ talked: "yes", rating: pendingRating })}
         >
-          Saltar
+          Skip
         </button>
       </div>
     );
@@ -371,8 +371,8 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
               }}
             >
               {stale
-                ? `¿Qué tal fue?${dayLabel(match.match_date) ? ` · ${dayLabel(match.match_date)}` : ""}`
-                : "Tu conexión de hoy"}
+                ? `How did it go?${dayLabel(match.match_date) ? ` · ${dayLabel(match.match_date)}` : ""}`
+                : "Today's connection"}
             </span>
           </div>
           <ChevronIcon dir={expanded ? "up" : "down"} color={expanded ? "rgba(255,255,255,0.5)" : "#6E7892"} />
@@ -437,7 +437,15 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
             borderTop: "1px solid #D6EEF5",
           }}
         >
-          {renderFeedback(false)}
+          <div
+            style={{
+              opacity: busy ? 0.55 : 1,
+              pointerEvents: busy ? "none" : "auto",
+              transition: "opacity 0.15s ease",
+            }}
+          >
+            {renderFeedback(false)}
+          </div>
         </div>
       )}
 
@@ -492,7 +500,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                     fontWeight: 600,
                   }}
                 >
-                  Hablad de
+                  Talk about
                 </div>
                 <div
                   style={{
@@ -522,7 +530,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                     marginBottom: 10,
                   }}
                 >
-                  {isFounder ? "Pregúntale" : "Qué te podría preguntar"}
+                  {isFounder ? "Ask them" : "What they might ask you"}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {questions.map((q, i) => (
@@ -583,14 +591,14 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
                       <path d="M20 6L9 17l-5-5" />
                     </svg>
-                    Avisado
+                    Notified
                   </>
                 ) : (
                   <>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z" />
                     </svg>
-                    Quiero hablar
+                    I&apos;d like to talk
                   </>
                 )}
               </button>
@@ -609,7 +617,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                   cursor: "pointer",
                 }}
               >
-                Ver ficha
+                View profile
               </button>
             </div>
 
@@ -621,7 +629,15 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
                 background: "#2D3852",
               }}
             >
-              {renderFeedback(true)}
+              <div
+                style={{
+                  opacity: busy ? 0.55 : 1,
+                  pointerEvents: busy ? "none" : "auto",
+                  transition: "opacity 0.15s ease",
+                }}
+              >
+                {renderFeedback(true)}
+              </div>
             </div>
           </Motion.div>
         )}
