@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
+import { resolvePhotoUrl } from "../lib/photoUrl";
 
 function loadChecked(matchId) {
   try {
@@ -54,7 +55,8 @@ function Avatar({ person, size, radius, fontSize }) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-  const show = person?.photo_url && !failed;
+  const src = resolvePhotoUrl(person?.photo_url);
+  const show = src && !failed;
   return (
     <div
       style={{
@@ -75,7 +77,7 @@ function Avatar({ person, size, radius, fontSize }) {
     >
       {show ? (
         <img
-          src={person.photo_url}
+          src={src}
           alt={person.full_name}
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}

@@ -1,7 +1,7 @@
 /* Simple service worker for offline support.
    This is intentionally minimal and backend-free. */
 
-const CACHE_NAME = "decelera-mx-pwa-v2";
+const CACHE_NAME = "decelera-mx-pwa-v3";
 
 // Core shell files. Vite will fingerprint JS/CSS, so we cache navigation + static assets.
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.ico"];
@@ -73,8 +73,10 @@ self.addEventListener("push", (event) => {
   const notificationId = payload.notificationId || null;
   let targetUrl;
   if (matchId) {
-    // Match notifications land on Home, which scrolls to / opens the match card.
-    targetUrl = `/?match=${encodeURIComponent(matchId)}`;
+    // Match notifications land on Home (mounted at /home), which scrolls to and
+    // opens the match card. Must be /home, not / — the "/" route redirects and
+    // drops the query string.
+    targetUrl = `/home?match=${encodeURIComponent(matchId)}`;
     if (notificationId) targetUrl += `&notif=${encodeURIComponent(notificationId)}`;
   } else {
     const baseUrl = eventId ? `/event/${eventId}` : personId ? `/person/${personId}` : "/notifications";

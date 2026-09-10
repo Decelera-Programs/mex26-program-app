@@ -288,7 +288,7 @@ export default function Notifications() {
                     onClick={async () => {
                       await onMarkAsRead(notif);
                       if (notif.event_id) openEventModal(notif.event_id);
-                      else if (notif.match_id) navigate(`/?match=${notif.match_id}`);
+                      else if (notif.match_id) navigate(`/home?match=${notif.match_id}`);
                       else if (notif.counterpart_person_id) navigate(`/person/${notif.counterpart_person_id}`);
                     }}
                     className="notification-card w-full text-left rounded-[20px] border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"

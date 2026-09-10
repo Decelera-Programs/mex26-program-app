@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
+import { resolvePhotoUrl } from "../lib/photoUrl";
 
 const introKey = (id) => `decelera.match.${id}.intro`;
 
@@ -28,7 +29,8 @@ function Avatar({ person, size = 56 }) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-  const show = person?.photo_url && !failed;
+  const src = resolvePhotoUrl(person?.photo_url);
+  const show = src && !failed;
   return (
     <div
       style={{
@@ -49,7 +51,7 @@ function Avatar({ person, size = 56 }) {
     >
       {show ? (
         <img
-          src={person.photo_url}
+          src={src}
           alt={person.full_name}
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}

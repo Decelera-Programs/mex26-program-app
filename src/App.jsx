@@ -58,7 +58,8 @@ const router = createBrowserRouter([
       if (hasCode || hasRecoveryHash) {
         return <Navigate to={`/reset-password${initialAuthSearch}${initialAuthHash}`} replace />;
       }
-      return <Navigate to="/home" replace />;
+      // Keep the query string (e.g. ?match=<id> from a push click) across the redirect.
+      return <Navigate to={`/home${initialAuthSearch}`} replace />;
     })(),
   },
   {
