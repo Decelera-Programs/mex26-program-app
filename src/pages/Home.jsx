@@ -8,6 +8,7 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
 import { DUR, SPRING_GENTLE } from "../lib/motion";
+import { isMatchOpened } from "../lib/matchFlags";
 
 // TODO: set the real Decelera México 2026 start date.
 const PROGRAM_START_DATE = "2026-05-23";
@@ -39,15 +40,6 @@ function dateKeyInProgramTz(raw) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(d);
 }
 
-// "Needs attention" pulse state, remembered in localStorage so a reload doesn't
-// re-pulse a card the user already dealt with.
-function matchOpened(id) {
-  try {
-    return localStorage.getItem(`decelera.match.${id}.opened`) === "1";
-  } catch {
-    return false;
-  }
-}
 const ONE_ON_ONE_VISIT_KEY = "decelera.oneonones.visited";
 function oneOnOnesVisitedOn(dayKey) {
   try {
@@ -154,7 +146,7 @@ export default function Home() {
         setPendingMatches(nextPending);
         const seededEngaged = new Set();
         for (const m of [nextToday, ...nextPending]) {
-          if (m?.id && (m.my_feedback || matchOpened(m.id))) seededEngaged.add(m.id);
+          if (m?.id && (m.my_feedback || isMatchOpened(m.id))) seededEngaged.add(m.id);
         }
         setEngagedMatchIds(seededEngaged);
 

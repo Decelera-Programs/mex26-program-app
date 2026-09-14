@@ -3,23 +3,7 @@ import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
 import { resolvePhotoUrl } from "../lib/photoUrl";
 import { SPRING } from "../lib/motion";
-
-const introKey = (id) => `decelera.match.${id}.intro`;
-
-function alreadySeen(id) {
-  try {
-    return localStorage.getItem(introKey(id)) === "1";
-  } catch {
-    return false;
-  }
-}
-function markSeen(id) {
-  try {
-    localStorage.setItem(introKey(id), "1");
-  } catch {
-    /* ignore */
-  }
-}
+import { isMatchIntroSeen, markMatchIntroSeen } from "../lib/matchFlags";
 
 function Avatar({ person, size = 56 }) {
   const [failed, setFailed] = useState(false);
@@ -72,7 +56,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
   const [open, setOpen] = useState(false);
 
   const close = () => {
-    if (match?.id) markSeen(match.id);
+    if (match?.id) markMatchIntroSeen(match.id);
     setOpen(false);
   };
   const seeDetails = () => {
@@ -82,7 +66,7 @@ export default function MatchIntroModal({ match, onSeeDetails }) {
 
   useEffect(() => {
     if (!match?.id || !match?.counterpart) return undefined;
-    if (match.my_feedback || alreadySeen(match.id)) return undefined;
+    if (match.my_feedback || isMatchIntroSeen(match.id)) return undefined;
     const t = setTimeout(() => setOpen(true), 450);
     return () => clearTimeout(t);
   }, [match?.id]); // eslint-disable-line react-hooks/exhaustive-deps

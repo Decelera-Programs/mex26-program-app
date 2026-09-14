@@ -3,6 +3,7 @@ import { motion as Motion, AnimatePresence } from "framer-motion";
 import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
 import { resolvePhotoUrl } from "../lib/photoUrl";
 import { DUR, SPRING, SPRING_GENTLE } from "../lib/motion";
+import { markMatchOpened } from "../lib/matchFlags";
 
 const RATINGS = [
   { key: "great", emoji: "🔥", label: "Very useful" },
@@ -81,14 +82,6 @@ function Avatar({ person, size, radius, fontSize }) {
   );
 }
 
-function markOpened(matchId) {
-  try {
-    localStorage.setItem(`decelera.match.${matchId}.opened`, "1");
-  } catch {
-    /* ignore */
-  }
-}
-
 export default function MatchCard({ match, onClick, stale = false, onEngaged, highlight = false }) {
   const [expanded, setExpanded] = useState(false);
   const [fb, setFb] = useState(match?.my_feedback ?? null);
@@ -124,7 +117,7 @@ export default function MatchCard({ match, onClick, stale = false, onEngaged, hi
   // The user has acted on this card today — stop any "needs attention" pulse.
   function engage() {
     if (!match?.id) return;
-    markOpened(match.id);
+    markMatchOpened(match.id);
     onEngaged?.(match.id);
   }
 
