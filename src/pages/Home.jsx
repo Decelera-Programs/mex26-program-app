@@ -120,7 +120,6 @@ export default function Home() {
   const [engagedMatchIds, setEngagedMatchIds] = useState(() => new Set());
   const [oneOnOneVisitedToday, setOneOnOneVisitedToday] = useState(() => oneOnOnesVisitedOn(getTodayKey()));
   const [highlightMatchId, setHighlightMatchId] = useState(null);
-  const [cameFromMatchLink, setCameFromMatchLink] = useState(false);
   const matchAnchorRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -224,11 +223,12 @@ export default function Home() {
 
   // Arrived from a match notification (?match=<id>): remember which card to
   // reveal, then drop the param so a refresh doesn't re-trigger. Reading a URL
-  // param into state once on arrival is a legitimate effect use here.
+  // param into state once on arrival is a legitimate effect use here. The intro
+  // modal below still gates itself to once/match/day, so this lands the same as
+  // an organic first open of the day — modal first, then the card underneath.
   useEffect(() => {
     const wanted = searchParams.get("match");
     if (!wanted) return;
-    setCameFromMatchLink(true);
     setHighlightMatchId(wanted);
     setSearchParams(
       (prev) => {
@@ -383,7 +383,7 @@ export default function Home() {
         </section>
 
         <div ref={matchAnchorRef} style={{ scrollMarginTop: 16 }} />
-        {todayMatch && !cameFromMatchLink ? (
+        {todayMatch ? (
           <MatchIntroModal
             match={todayMatch}
             onSeeDetails={() => {
