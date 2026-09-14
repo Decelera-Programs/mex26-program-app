@@ -12,14 +12,14 @@ const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embe
 // Founder<->Experience Maker daily matching runs in the program's timezone.
 export const MATCHING_TIMEZONE = "America/Mexico_City";
 const MATCH_CANDIDATE_POOL_SIZE = 10;
-const MATCH_WEIGHT_CHALLENGE = 3;
-const MATCH_WEIGHT_DIRECT_TAG = 1;
+export const MATCH_WEIGHT_CHALLENGE = 3;
+export const MATCH_WEIGHT_DIRECT_TAG = 1;
 // Semantic term: cosine similarity between the founder's stated need
 // (challenge_name + expertise_wanted + top sections) and the EM's profile
 // (tagline + expertise_tags + bio), rescaled from [SIM_MIN, SIM_MAX] to [0, 1]
 // and worth up to MATCH_WEIGHT_TEXT "tag points". The tag-overlap score stays as
 // a floor; this only adds. If OPENAI_API_KEY is unset the term is simply 0.
-const MATCH_WEIGHT_TEXT = 8;
+export const MATCH_WEIGHT_TEXT = 8;
 const MATCH_TEXT_SIM_MIN = 0.15;
 const MATCH_TEXT_SIM_MAX = 0.55;
 // Quality floor. Minimum fit score (tag overlap + semantic similarity, BEFORE the
@@ -30,9 +30,9 @@ const MATCH_TEXT_SIM_MAX = 0.55;
 // "below_quality_floor", visible in ?dryRun=1). One challenge-derived tag hit is worth
 // MATCH_WEIGHT_CHALLENGE (3) and a modest semantic signal clears this on its own;
 // raise it to be stricter.
-const MATCH_MIN_SCORE = 2.0;
+export const MATCH_MIN_SCORE = 2.0;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
-const MATCH_EM_DAILY_CAPACITY_CAP = 4;
+export const MATCH_EM_DAILY_CAPACITY_CAP = 4;
 // A challenge section counts as "a real problem" at this average severity.
 // Ratings are 1-4 ("1 — Not a priority" ... "4 — Critical / blocking"), so requiring an
 // average >= 3 meant every sub-topic had to be an active pain point — too strict; most
@@ -186,7 +186,7 @@ function tagsFromChallengeSections(challenges: unknown): string[] {
   return Array.from(tags);
 }
 
-type MatchCandidatePerson = {
+export type MatchCandidatePerson = {
   id: string;
   full_name: string;
   bio: string | null;
@@ -432,14 +432,14 @@ async function loadEmOfferVectors(ems: MatchCandidatePerson[]): Promise<Map<stri
 
 // ---------------------------------------------------------------------------
 
-type CandidateScore = {
+export type CandidateScore = {
   em: MatchCandidatePerson;
   score: number;
   tagScore: number;
   textScore: number;
 };
 
-function scoreCandidates(
+export function scoreCandidates(
   founder: MatchCandidatePerson,
   ems: MatchCandidatePerson[],
   hardExcludedPairs: Set<string>,
@@ -717,6 +717,35 @@ type MatchPlanEntry = {
   prior_matches: number;
 };
 
+export type MatchEdge = { founderId: string; emId: string; score: number; weight: number };
+export type MatchAssignment = { emId: string; score: number; method: string };
+
+// Greedy bipartite-ish assignment by weight: each founder gets <=1 EM, each EM
+// gets <= capacity founders/day ("global_greedy"). A second pass at capacity+1
+// rescues founders who still have no slot ("global_fill"), so nobody is left
+// without a recommendation. Pure and deterministic given its inputs — ties break
+// on founderId/emId so the result doesn't depend on edge order.
+export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<string, MatchAssignment> {
+  const sorted = [...edges].sort(
+    (a, b) =>
+      b.weight - a.weight ||
+      a.founderId.localeCompare(b.founderId) ||
+      a.emId.localeCompare(b.emId),
+  );
+
+  const assignment = new Map<string, MatchAssignment>();
+  const emLoad = new Map<string, number>();
+  const tryAssign = (edge: MatchEdge, method: string, cap: number) => {
+    if (assignment.has(edge.founderId)) return;
+    if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
+    assignment.set(edge.founderId, { emId: edge.emId, score: edge.score, method });
+    emLoad.set(edge.emId, (emLoad.get(edge.emId) ?? 0) + 1);
+  };
+  for (const edge of sorted) tryAssign(edge, "global_greedy", capacity);
+  for (const edge of sorted) tryAssign(edge, "global_fill", capacity + 1);
+  return assignment;
+}
+
 // Never throws: any unexpected error is caught and returned as { ok: false }, so
 // one bad day can't take down /jobs/run-all. Pass { dryRun: true } to compute the
 // plan + skip reasons without writing any match/notification rows or generating
@@ -789,27 +818,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean }
       MATCH_EM_DAILY_CAPACITY_CAP,
       Math.max(1, Math.ceil(foundersToProcess.length / ems.length)),
     );
-    edges.sort(
-      (a, b) =>
-        b.weight - a.weight ||
-        a.founderId.localeCompare(b.founderId) ||
-        a.emId.localeCompare(b.emId),
-    );
-
-    const assignment = new Map<string, { emId: string; score: number; method: string }>();
-    const emLoad = new Map<string, number>();
-    const tryAssign = (
-      edge: { founderId: string; emId: string; score: number; weight: number },
-      method: string,
-      cap: number,
-    ) => {
-      if (assignment.has(edge.founderId)) return;
-      if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
-      assignment.set(edge.founderId, { emId: edge.emId, score: edge.score, method });
-      emLoad.set(edge.emId, (emLoad.get(edge.emId) ?? 0) + 1);
-    };
-    for (const edge of edges) tryAssign(edge, "global_greedy", capacity);
-    for (const edge of edges) tryAssign(edge, "global_fill", capacity + 1);
+    const assignment = assignFoundersToEms(edges, capacity);
 
     // 2b. Quality floor: drop any assigned pair whose fit score (tag + text, no
     //     multipliers) is below MATCH_MIN_SCORE. Those founders get no match today
