@@ -59,7 +59,7 @@ export default function PersonCard({ person, index = 0 }) {
                 minWidth: 46,
                 borderRadius: 14,
                 background: "#EDF1F4",
-                boxShadow: "inset 0 0 0 1px rgba(45,56,82,0.05)",
+                boxShadow: "0 3px 8px rgba(45,56,82,0.12), inset 0 0 0 1px rgba(45,56,82,0.05)",
                 color: "#2D3852",
                 fontWeight: 700,
                 fontSize: 14,

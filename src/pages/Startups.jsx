@@ -49,16 +49,21 @@ export default function Startups() {
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
 
         <div
+          className="relative overflow-hidden"
           style={{
             borderRadius: 20,
             padding: "20px 22px",
             background: "#FAF3DC",
             color: "#2D3852",
-            boxShadow: "0 1px 3px rgba(45, 56, 82, 0.06)",
+            boxShadow: "0 18px 40px rgba(31, 208, 239, 0.10)",
             marginBottom: 16,
           }}
         >
-          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }}>
+          <div
+            className="decelera-breathe-mark pointer-events-none absolute -right-10 -bottom-16 h-[220px] w-[220px] rounded-full"
+            style={{ background: "rgba(45, 56, 82, 0.28)" }}
+          />
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }} className="relative">
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               Startups
             </h1>
@@ -106,6 +111,19 @@ export default function Startups() {
   );
 }
 
+// Stage -> left-accent colour, same muted family as PersonCard's ROLE_META so
+// the two card types read as one system. Unrecognised/missing stage falls
+// back to neutral grey rather than no colour at all.
+const STAGE_COLORS = {
+  "pre-seed": "#c77b4a",
+  seed: "#1f9aaf",
+  "series a": "#5e6aa0",
+  "series b": "#3e7d4f",
+};
+function stageColor(stage) {
+  return STAGE_COLORS[String(stage || "").trim().toLowerCase()] || "#98a0b3";
+}
+
 // One quiet chip style for all startup metadata (stage, year) — same size,
 // same weight, same colour, so the card reads as one thing.
 const chipStyle = {
@@ -128,12 +146,16 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
       transition={{ ...SPRING, delay: stagger(index) }}
     >
       <Link to={`/startup/${startup.id}`} className="block">
-        <div className="app-card-interactive person-card">
+        <div className="app-card-interactive person-card" style={{ overflow: "hidden" }}>
+          <span
+            aria-hidden="true"
+            style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: stageColor(startup.stage) }}
+          />
           <div className="flex items-center gap-[13px]">
             {startup.logo_url && !failedLogos[startup.id] ? (
               <div
                 className="flex-shrink-0 bg-white"
-                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, border: "1px solid #E4EAF0", boxShadow: "0 1px 3px rgba(45,56,82,0.06)", padding: 5, overflow: "hidden" }}
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, border: "1px solid #E4EAF0", boxShadow: "0 3px 8px rgba(45,56,82,0.12)", padding: 5, overflow: "hidden" }}
               >
                 <img
                   src={startup.logo_url}
@@ -147,7 +169,7 @@ function StartupCard({ startup, index, failedLogos, setFailedLogos }) {
             ) : (
               <div
                 className="flex items-center justify-center flex-shrink-0"
-                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, background: "#EDF1F4", boxShadow: "inset 0 0 0 1px rgba(45,56,82,0.05)", color: "#2D3852", fontWeight: 700, fontSize: 17 }}
+                style={{ width: 46, height: 46, minWidth: 46, borderRadius: 14, background: "#EDF1F4", boxShadow: "0 3px 8px rgba(45,56,82,0.12), inset 0 0 0 1px rgba(45,56,82,0.05)", color: "#2D3852", fontWeight: 700, fontSize: 17 }}
               >
                 {(startup.name || "?")[0].toUpperCase()}
               </div>

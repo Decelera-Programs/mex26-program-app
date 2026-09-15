@@ -75,16 +75,21 @@ export default function People() {
     <div className="w-full pt-[30px] pb-6 sm:pt-[40px]" style={{ background: "#F2F8FA" }}>
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
         <div
+          className="relative overflow-hidden"
           style={{
             borderRadius: 20,
             padding: "20px 22px",
             background: "#FAF3DC",
             color: "#2D3852",
-            boxShadow: "0 1px 3px rgba(45, 56, 82, 0.06)",
+            boxShadow: "0 18px 40px rgba(31, 208, 239, 0.10)",
             marginBottom: 16,
           }}
         >
-          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }}>
+          <div
+            className="decelera-breathe-mark pointer-events-none absolute -right-10 -bottom-16 h-[220px] w-[220px] rounded-full"
+            style={{ background: "rgba(45, 56, 82, 0.28)" }}
+          />
+          <Motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE.out }} className="relative">
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 26, color: "#2D3852", margin: 0, letterSpacing: "-0.01em" }}>
               People
             </h1>
