@@ -351,28 +351,6 @@ export async function listEventPeople(eventId) {
   return Array.isArray(people) ? people.map(normalizePerson).filter((p) => p && p.contact_type) : [];
 }
 
-export async function getMyScheduleDayFeedback(dayKey) {
-  if (!dayKey) return {};
-  const payload = await api(`/feedback/schedule/${encodeURIComponent(dayKey)}`);
-  const ratings = payload?.ratings;
-  if (!ratings || typeof ratings !== "object" || Array.isArray(ratings)) return {};
-  return ratings;
-}
-
-export async function setMyScheduleEventFeedback(dayKey, eventId, rating) {
-  if (!dayKey || !eventId) return {};
-  const payload = await api(`/feedback/schedule/${encodeURIComponent(dayKey)}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      event_id: eventId,
-      rating,
-    }),
-  });
-  const ratings = payload?.schedule_feedback;
-  if (!ratings || typeof ratings !== "object" || Array.isArray(ratings)) return {};
-  return ratings;
-}
-
 export async function listPeople() {
   if (Date.now() < peopleCache.expiresAt && peopleCache.value) return peopleCache.value;
   if (peopleCache.promise) return peopleCache.promise;

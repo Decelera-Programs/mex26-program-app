@@ -18,7 +18,6 @@ const People = lazy(() => import("./pages/People"));
 const PersonDetail = lazy(() => import("./pages/PersonDetail"));
 const Startups = lazy(() => import("./pages/Startups"));
 const StartupDetail = lazy(() => import("./pages/StartupDetail"));
-const ScheduleFeedback = lazy(() => import("./pages/ScheduleFeedback"));
 const Logistics = lazy(() => import("./pages/Logistics"));
 const MediaKit = lazy(() => import("./pages/MediaKit"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
@@ -74,7 +73,6 @@ const router = createBrowserRouter([
     children: [
       { path: "/home", element: <Home /> },
       { path: "/schedule", element: <Schedule /> },
-      { path: "/schedule/feedback/:day", element: <ScheduleFeedback /> },
       { path: "/notifications", element: <Notifications /> },
       { path: "/one-on-ones", element: <OneOnOnes /> },
       { path: "/info", element: <InfoHub /> },

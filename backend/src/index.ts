@@ -643,49 +643,11 @@ function isMissingTableError(error: unknown, modelName: string) {
   return maybe.code === "P2021" && maybe.meta?.modelName === modelName;
 }
 
-function parseScheduleDayKey(raw: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const parsed = new Date(`${raw}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return {
-    dayKey: raw,
-    dayNumber: parsed.getUTCDate(),
-  };
-}
-
 function parseDateKey(raw: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
   const parsed = new Date(`${raw}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return null;
   return { dateKey: raw, date: parsed };
-}
-
-function toScheduleFeedbackObject(raw: unknown) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>).filter(
-      ([key, value]) =>
-        Boolean(key) &&
-        typeof value === "number" &&
-        Number.isInteger(value) &&
-        value >= 1 &&
-        value <= 5,
-    ),
-  ) as Record<string, number>;
-}
-
-function slugifyEventTitle(rawTitle: string) {
-  return rawTitle
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .replace(/_+/g, "_");
-}
-
-function scheduleFeedbackKey(eventTitle: string, dayNumber: number) {
-  const safeTitle = slugifyEventTitle(eventTitle) || "event";
-  return `${safeTitle}_${dayNumber}`;
 }
 
 function getBearerToken(req: Request) {
@@ -2089,106 +2051,6 @@ app.get("/events/:eventId/people", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load event people";
     res.status(500).json({ error: message });
-  }
-});
-
-app.get("/feedback/schedule/:dayKey", async (req, res) => {
-  try {
-    const auth = (req as AuthenticatedRequest).auth;
-    if (!auth?.email || !auth?.sub) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    const parsedDay = parseScheduleDayKey(z.string().parse(req.params.dayKey));
-    if (!parsedDay) {
-      res.status(400).json({ error: "Invalid day key. Expected YYYY-MM-DD" });
-      return;
-    }
-    const person = await resolvePersonFromAuth(auth);
-    if (!person) {
-      res.status(403).json({ error: "No person record linked to this email" });
-      return;
-    }
-    const feedback = toScheduleFeedbackObject(person.schedule_feedback);
-    const suffix = `_${parsedDay.dayNumber}`;
-    const dayRatings = Object.fromEntries(
-      Object.entries(feedback).filter(([key]) => key.endsWith(suffix)),
-    );
-    res.json({
-      day: parsedDay.dayKey,
-      day_number: parsedDay.dayNumber,
-      ratings: dayRatings,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to load schedule feedback" });
-  }
-});
-
-app.put("/feedback/schedule/:dayKey", async (req, res) => {
-  try {
-    const auth = (req as AuthenticatedRequest).auth;
-    if (!auth?.email || !auth?.sub) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    personResolutionCache.delete(auth.sub);
-    const parsedDay = parseScheduleDayKey(z.string().parse(req.params.dayKey));
-    if (!parsedDay) {
-      res.status(400).json({ error: "Invalid day key. Expected YYYY-MM-DD" });
-      return;
-    }
-    const parsedBody = z
-      .object({
-        event_id: z.string().min(1).optional(),
-        event_title: z.string().min(1).optional(),
-        rating: z.number().int().min(1).max(5),
-      })
-      .safeParse(req.body);
-    if (!parsedBody.success) {
-      res.status(400).json({ error: "Invalid feedback payload" });
-      return;
-    }
-    const person = await resolvePersonFromAuth(auth);
-    if (!person) {
-      res.status(403).json({ error: "No person record linked to this email" });
-      return;
-    }
-
-    let eventTitle = parsedBody.data.event_title?.trim() || "";
-    if (!eventTitle && parsedBody.data.event_id) {
-      const event = await prisma.event.findUnique({
-        where: { id: parsedBody.data.event_id },
-        select: { title: true },
-      });
-      if (!event?.title) {
-        res.status(404).json({ error: "Event not found" });
-        return;
-      }
-      eventTitle = event.title;
-    }
-    if (!eventTitle) {
-      res.status(400).json({ error: "event_id or event_title is required" });
-      return;
-    }
-
-    const key = scheduleFeedbackKey(eventTitle, parsedDay.dayNumber);
-    const feedback = toScheduleFeedbackObject(person.schedule_feedback);
-    feedback[key] = parsedBody.data.rating;
-
-    const updated = await prisma.person.update({
-      where: { id: person.id },
-      data: { schedule_feedback: feedback },
-      select: { schedule_feedback: true },
-    });
-
-    res.json({
-      ok: true,
-      key,
-      rating: parsedBody.data.rating,
-      schedule_feedback: toScheduleFeedbackObject(updated.schedule_feedback),
-    });
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save schedule feedback" });
   }
 });
 

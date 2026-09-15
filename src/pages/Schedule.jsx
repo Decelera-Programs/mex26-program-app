@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import moment from "moment";
 import { motion as Motion, AnimatePresence } from "framer-motion";
@@ -448,30 +448,6 @@ export default function Schedule() {
                 Calendar view of the day
               </p>
             </div>
-
-            <Link
-              to={`/schedule/feedback/${activeDay.format("YYYY-MM-DD")}`}
-              className="app-card-interactive"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 20,
-                padding: "14px 16px",
-                border: "1.5px solid #EEF2F5",
-                backgroundColor: "#2D3852",
-                color: "#FFFFFF",
-                fontSize: 11,
-                fontWeight: 800,
-                fontFamily: "Fustat, sans-serif",
-                letterSpacing: "0.02em",
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
-                minHeight: 44,
-              }}
-            >
-              Send us your feedback
-            </Link>
           </Motion.div>
 
         </div>

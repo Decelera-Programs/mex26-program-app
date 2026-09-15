@@ -130,7 +130,6 @@ Auth: `requireSupabaseAuth` validates the `Authorization: Bearer <jwt>` on all r
 - **Per-user**: `GET /users/:id/schedule`, `GET /users/:id/notifications`
   (+ `PATCH .../read`, `PATCH .../read-all`), `GET /matches/me`,
   `GET /one-on-ones/me` (+ `/audio`), `GET /team-notes/me` (+ `POST /team-notes`)
-- **Feedback**: `GET|PUT /feedback/schedule/:dayKey`
 - **Push**: `GET /push/public-key`, `POST /push/subscribe`, `POST /push/unsubscribe`
 - **Campaigns (admin)**: `GET|POST /campaigns`, `POST /campaigns/preview`,
   `POST /campaigns/:id/send-now`, `GET /campaigns/:id/stats`

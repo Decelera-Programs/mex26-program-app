@@ -49,7 +49,6 @@ model Person {
   /// Cached OpenAI embedding of the EM profile text, for the daily match's semantic
   /// scoring. Shape: { hash, model, vector }. Recomputed only when the source text changes.
   embedding      Json?
-  schedule_feedback           Json?
   post_program_expectations   Json?
   fun_fact       String?
   dni            String?

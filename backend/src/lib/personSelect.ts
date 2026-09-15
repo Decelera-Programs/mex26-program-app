@@ -14,7 +14,6 @@ export const personSafeSelect = {
   arrival_date: true,
   departure_date: true,
   expertise_tags: true,
-  schedule_feedback: true,
   startup_id: true,
   post_program_expectations: true,
   fun_fact: true,
