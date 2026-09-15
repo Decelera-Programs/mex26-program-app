@@ -142,7 +142,7 @@ export default function PersonDetail() {
                 <div className="inline-flex items-baseline gap-2 mt-2">
                   {contactType ? (
                     <span
-                      className="person-detail-contact-type-tag inline-flex px-3 py-1 rounded-full text-xs font-semibold"
+                      className="person-detail-contact-type-tag inline-flex px-3 py-1 rounded-full text-[10.5px] font-semibold"
                       style={{
                         border: "none",
                         background: `${typeColors[contactType] || "#2D3852"}29`,
