@@ -127,8 +127,8 @@ export default function StartupDetail() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
-            style={{ background: "rgba(45, 56, 82, 0.18)" }}
+            className="decelera-breathe-mark pointer-events-none absolute -right-10 -bottom-16 h-[220px] w-[220px] rounded-full"
+            style={{ background: "rgba(45, 56, 82, 0.28)" }}
           />
           <Motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -158,8 +158,8 @@ export default function StartupDetail() {
             </div>
             {startup.logo_url && !startupLogoFailed ? (
               <div
-                className="w-[88px] h-[88px] min-w-[88px] min-h-[88px] aspect-square flex-none rounded-full overflow-hidden shadow-sm bg-white border border-[#E2E7ED] cursor-pointer"
-                style={{ marginLeft: "auto", marginRight: 16, backgroundColor: "white", padding: 6 }}
+                className="w-[88px] h-[88px] min-w-[88px] min-h-[88px] aspect-square flex-none rounded-full overflow-hidden bg-white border border-[#E2E7ED] cursor-pointer"
+                style={{ marginLeft: "auto", marginRight: 16, backgroundColor: "white", padding: 6, boxShadow: "0 10px 22px rgba(45,56,82,0.16)" }}
                 onClick={() => setLogoOpen(true)}
               >
                 <img
@@ -171,7 +171,7 @@ export default function StartupDetail() {
                 />
               </div>
             ) : (
-              <div className="w-[88px] h-[88px] min-w-[88px] min-h-[88px] aspect-square flex-none rounded-full bg-white border border-[#E2E7ED] flex items-center justify-center text-[#2D3852] text-2xl font-bold" style={{ marginLeft: "auto", marginRight: 16 }}>
+              <div className="w-[88px] h-[88px] min-w-[88px] min-h-[88px] aspect-square flex-none rounded-full bg-white border border-[#E2E7ED] flex items-center justify-center text-[#2D3852] text-2xl font-bold" style={{ marginLeft: "auto", marginRight: 16, boxShadow: "0 10px 22px rgba(45,56,82,0.16)" }}>
                 {startup.name[0]}
               </div>
             )}
