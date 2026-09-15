@@ -3,7 +3,7 @@ import { getCurrentUser, getHomeDailyContent, getMyMatches, getOneOnOneAudio, li
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
-import { ArrowRight, CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
+import { CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
@@ -546,33 +546,6 @@ export default function Home() {
         />
 
         <SponsorsSection />
-
-        <a
-          href="https://decelera.fillout.com/zincomatch?utm_source=decelera_app"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            background: "linear-gradient(135deg, #3d6740 0%, #2a4a2d 100%)",
-            borderRadius: 20,
-            padding: "16px 18px",
-            textDecoration: "none",
-            marginTop: 4,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <img src="/sponsors/sponsor-1.svg" alt="Zinco AI" style={{ width: 24, height: 24, objectFit: "contain" }} />
-            </div>
-            <div>
-              <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#51ca6b", margin: 0 }}>Zinco</p>
-              <p style={{ fontSize: 13.5, fontWeight: 600, color: "#FFFFFF", margin: "2px 0 0" }}>Find your match.<br />Spoiler: <em>you&apos;ll like the result.</em></p>
-            </div>
-          </div>
-          <ArrowRight size={16} color="#51ca6b" strokeWidth={2} />
-        </a>
       </div>
     </div>
   );
@@ -834,7 +807,7 @@ function PeopleCardPreview({ people, onClick }) {
       type="button"
       onClick={onClick}
       className="w-full text-left rounded-[20px] border px-[18px] pt-[16px] pb-[14px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
-      style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}
+      style={{ background: "#FFFFFF", borderColor: "#EEF2F5", boxShadow: "0 4px 14px rgba(45,56,82,0.06)" }}
     >
       <div className="flex items-center gap-[18px]">
         <div style={{ position: "relative", width: 78, height: 36 }} aria-hidden="true">
@@ -882,8 +855,8 @@ function PeopleCardPreview({ people, onClick }) {
               marginTop: 2,
             }}
           >
-            <MapPin size={11} color="#0A859B" style={{ transform: "translateY(-5px)" }} />
-            <span style={{ transform: "translateY(-5px)" }}>
+            <MapPin size={11} color="#0A859B" />
+            <span>
               <b style={{ color: "#2D3852", fontWeight: 600 }}>{foundersMentorsCount}</b> founders &amp; mentors today
             </span>
           </div>
