@@ -43,7 +43,13 @@ export default function PersonCard({ person, index = 0 }) {
       transition={{ ...SPRING, delay: stagger(index) }}
     >
       <Link to={`/person/${person.id}`} className="block">
-        <div className="app-card-interactive person-card">
+        <div className="app-card-interactive person-card" style={{ overflow: "hidden" }}>
+          {role && (
+            <span
+              aria-hidden="true"
+              style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: role.dot }}
+            />
+          )}
           <div className="flex items-center gap-[13px]">
             <div
               className="flex items-center justify-center flex-shrink-0 overflow-hidden"
