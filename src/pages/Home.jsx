@@ -755,7 +755,7 @@ function AvatarBubble({ person, i }) {
     <div
       style={{
         position: "absolute",
-        left: i * 18,
+        left: i * 14,
         top: 0,
         width: 36,
         height: 36,
@@ -801,6 +801,10 @@ function PeopleCardPreview({ people, onClick }) {
     : [];
   const preview = presentToday.slice(0, 4);
   const foundersMentorsCount = presentToday.length;
+  // The stack is 4 overlapping 36px circles offset 18px each; size the
+  // container to however many are actually shown so a single avatar doesn't
+  // leave a dead gap before the text (was a fixed 78px, sized for exactly 4).
+  const avatarStackWidth = 36 + (Math.max(preview.length, 1) - 1) * 14;
 
   return (
     <button
@@ -810,7 +814,7 @@ function PeopleCardPreview({ people, onClick }) {
       style={{ background: "#FFFFFF", borderColor: "#EEF2F5", boxShadow: "0 4px 14px rgba(45,56,82,0.06)" }}
     >
       <div className="flex items-center gap-[18px]">
-        <div style={{ position: "relative", width: 78, height: 36 }} aria-hidden="true">
+        <div style={{ position: "relative", width: preview.length ? avatarStackWidth : 78, height: 36 }} aria-hidden="true">
           {preview.length ? (
             preview.map((p, i) => (
               <AvatarBubble key={p?.id || i} person={p} i={i} />
@@ -821,7 +825,7 @@ function PeopleCardPreview({ people, onClick }) {
                 key={txt}
                 style={{
                   position: "absolute",
-                  left: i * 18,
+                  left: i * 14,
                   top: 0,
                   width: 36,
                   height: 36,
