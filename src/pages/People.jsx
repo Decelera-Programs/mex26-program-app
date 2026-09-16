@@ -18,14 +18,41 @@ const TABS = [
   { key: "team", label: "Team" },
 ];
 
+// Remember the filter state for the length of the tab/session, so opening a
+// person and coming back doesn't reset the tab/search/"here today" toggle.
+// Deliberately session-scoped (not localStorage) — a fresh app open should
+// start clean.
+const FILTERS_KEY = "decelera.people.filters";
+function loadSavedFilters() {
+  try {
+    const raw = sessionStorage.getItem(FILTERS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function saveFilters(filters) {
+  try {
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function People() {
   const location = useLocation();
+  const savedFilters = loadSavedFilters();
   const [user, setUser] = useState(null);
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all");
-  const [search, setSearch] = useState("");
-  const [todayOnly, setTodayOnly] = useState(location.state?.todayOnly ?? false);
+  const [activeTab, setActiveTab] = useState(savedFilters?.activeTab ?? "all");
+  const [search, setSearch] = useState(savedFilters?.search ?? "");
+  const [todayOnly, setTodayOnly] = useState(location.state?.todayOnly ?? savedFilters?.todayOnly ?? false);
+
+  useEffect(() => {
+    saveFilters({ activeTab, search, todayOnly });
+  }, [activeTab, search, todayOnly]);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
