@@ -361,7 +361,7 @@ export default function Home() {
               style={{
                 fontSize: "14px",
                 fontStyle: "italic",
-                marginTop: "4px",
+                margin: "4px 0 0",
                 color: heroTheme.color,
                 opacity: 0.7,
               }}
@@ -438,8 +438,8 @@ export default function Home() {
                   <Users size={16} color="#0A859B" />
                 </div>
                 <div>
-                  <p style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>Your 1:1&apos;s</p>
-                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
+                  <p style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", margin: 0 }}>Your 1:1&apos;s</p>
+                  <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", margin: 0 }}>
                     {myOneOnOnesCount} meeting{myOneOnOnesCount === 1 ? "" : "s"} assigned
                   </p>
                 </div>
@@ -475,8 +475,8 @@ export default function Home() {
                 <CalendarDays size={17} color="#0A859B" />
               </div>
               <div>
-                <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>Today&apos;s schedule</p>
-                <p style={{ fontSize: "11px", color: "#6E7892" }}>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852", margin: 0 }}>Today&apos;s schedule</p>
+                <p style={{ fontSize: "11px", color: "#6E7892", margin: 0 }}>
                   {todaysEvents.length} session{todaysEvents.length === 1 ? "" : "s"}
                 </p>
               </div>
@@ -490,24 +490,24 @@ export default function Home() {
               style={{ background: "#F2F8FA", display: "flex", alignItems: "center", gap: 14 }}
             >
               <div style={{ textAlign: "right", minWidth: 42 }}>
-                <p style={{ fontSize: "11px", color: "#6E7892", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>
+                <p style={{ fontSize: "11px", color: "#6E7892", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, margin: 0 }}>
                   Next
                 </p>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "#2D3852" }}>{formatHour(getEventStart(nextEvent))}</p>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "#2D3852", margin: 0 }}>{formatHour(getEventStart(nextEvent))}</p>
               </div>
               <div style={{ width: 1, alignSelf: "stretch", background: "#E2E7ED" }} />
               <div className="min-w-0 flex-1">
-                <p style={{ fontSize: "13.5px", color: "#2D3852", fontWeight: 500 }} className="truncate">
+                <p style={{ fontSize: "13.5px", color: "#2D3852", fontWeight: 500, margin: 0 }} className="truncate">
                   {nextEvent.title}
                 </p>
-                <p style={{ fontSize: "11px", color: "#6E7892", marginTop: 2 }} className="truncate">
+                <p style={{ fontSize: "11px", color: "#6E7892", margin: "2px 0 0" }} className="truncate">
                   {nextEvent.location || "Location TBD"}
                 </p>
               </div>
             </div>
           ) : (
             <div className="rounded-[14px] px-[14px] py-[12px] mb-[8px]" style={{ background: "#F2F8FA" }}>
-              <p style={{ fontSize: "12px", color: "#6E7892" }}>No sessions scheduled for today.</p>
+              <p style={{ fontSize: "12px", color: "#6E7892", margin: 0 }}>No sessions scheduled for today.</p>
             </div>
           )}
 
@@ -629,7 +629,7 @@ function DailyPodcastCard({ podcast, dark = false }) {
 
       <p
         className="uppercase"
-        style={{ fontSize: "11px", letterSpacing: "0.14em", fontWeight: 500, color: dark ? "rgba(255,255,255,0.55)" : "rgba(45,56,82,0.55)" }}
+        style={{ fontSize: "11px", letterSpacing: "0.14em", fontWeight: 500, color: dark ? "rgba(255,255,255,0.55)" : "rgba(45,56,82,0.55)", margin: 0 }}
       >
         Daily podcast
       </p>
@@ -848,7 +848,7 @@ function PeopleCardPreview({ people, onClick }) {
         </div>
 
         <div className="min-w-0 flex-1" style={{ paddingLeft: 2 }}>
-          <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>On site</p>
+          <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852", margin: 0 }}>On site</p>
           <div
             style={{
               display: "flex",
