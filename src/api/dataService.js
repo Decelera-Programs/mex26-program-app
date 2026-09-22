@@ -478,6 +478,21 @@ export async function sendCampaignNow(campaignId, adminKey = "") {
   });
 }
 
+export async function updateCampaign(campaignId, payload, adminKey = "") {
+  return api(`/campaigns/${encodeURIComponent(campaignId)}`, {
+    method: "PATCH",
+    headers: adminKey ? { "x-admin-key": adminKey } : undefined,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCampaign(campaignId, adminKey = "") {
+  return api(`/campaigns/${encodeURIComponent(campaignId)}`, {
+    method: "DELETE",
+    headers: adminKey ? { "x-admin-key": adminKey } : undefined,
+  });
+}
+
 async function listMyOneOnOnes() {
   const records = await api("/one-on-ones/me");
   return Array.isArray(records) ? records.map(normalizeOneOnOne) : [];

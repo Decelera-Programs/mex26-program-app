@@ -111,6 +111,17 @@ const campaignCreateSchema = z
   })
   .strict();
 
+const campaignUpdateSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    message: z.string().min(1).optional(),
+    event_id: z.string().min(1).nullable().optional(),
+    filters: campaignFiltersSchema.optional(),
+    mode: z.enum(["draft", "send_now", "schedule"]).optional(),
+    scheduled_for: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
 async function findPersonByEmail(rawEmail: string) {
   const normalizedEmail = normalizeEmail(rawEmail);
   const direct = await prisma.person.findFirst({
@@ -1212,6 +1223,72 @@ app.get("/campaigns/:id/stats", requireCampaignAdmin, async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Failed to read campaign stats" });
+  }
+});
+
+app.patch("/campaigns/:id", requireCampaignAdmin, async (req, res) => {
+  try {
+    const id = z.string().parse(req.params.id);
+    const existing = await prisma.notificationCampaign.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+    if (existing.status === "sent" || existing.status === "processing") {
+      res.status(400).json({ error: "Only draft or scheduled campaigns can be edited" });
+      return;
+    }
+
+    const parsed = campaignUpdateSchema.parse(req.body || {});
+    const nextFilters = parsed.filters ?? (existing.filters_json as unknown as CampaignFilters);
+    const targetCount = parsed.filters ? (await resolveAudience(nextFilters)).length : existing.target_count;
+    const nextMode = parsed.mode ?? (existing.status === "scheduled" ? "schedule" : "draft");
+
+    const updated = await prisma.notificationCampaign.update({
+      where: { id },
+      data: {
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.message !== undefined ? { message: parsed.message } : {}),
+        ...(parsed.event_id !== undefined ? { event_id: parsed.event_id || null } : {}),
+        ...(parsed.filters !== undefined ? { filters_json: parsed.filters, target_count: targetCount } : {}),
+        status: nextMode === "schedule" ? "scheduled" : nextMode === "send_now" ? existing.status : "draft",
+        scheduled_for: nextMode === "schedule" && parsed.scheduled_for !== undefined
+          ? (parsed.scheduled_for ? new Date(parsed.scheduled_for) : null)
+          : nextMode === "schedule"
+            ? existing.scheduled_for
+            : null,
+        error_message: null,
+      },
+    });
+
+    if (nextMode === "send_now") {
+      const result = await dispatchCampaign(updated.id, "send-now-after-edit");
+      res.json(result);
+      return;
+    }
+
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update campaign" });
+  }
+});
+
+app.delete("/campaigns/:id", requireCampaignAdmin, async (req, res) => {
+  try {
+    const id = z.string().parse(req.params.id);
+    const existing = await prisma.notificationCampaign.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+    if (existing.status === "sent" || existing.status === "processing") {
+      res.status(400).json({ error: "Only draft or scheduled campaigns can be deleted" });
+      return;
+    }
+    await prisma.notificationCampaign.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Failed to delete campaign" });
   }
 });
 
