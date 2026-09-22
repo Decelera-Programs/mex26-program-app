@@ -15,7 +15,7 @@ model Event {
   description String?
   start_time  DateTime
   end_time    DateTime
-  location    String
+  location    String?
   type        String
   visible_to_contact_types Json?
 
