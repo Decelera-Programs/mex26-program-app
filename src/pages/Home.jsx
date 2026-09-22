@@ -16,7 +16,7 @@ const PROGRAM_START_DATE = "2026-05-23";
 const FALLBACK_HERO_CONTENT = {
   phase_label: "",
   badge_text: `TODAY · ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: PROGRAM_TIMEZONE }).format(new Date())}`,
-  title: "Decelera México 2026",
+  title: "Decelera\nMéxico 2026",
   subtitle: (() => {
     const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(new Date());
     const diff = Math.ceil((new Date(PROGRAM_START_DATE) - new Date(todayStr)) / 86400000);
@@ -295,14 +295,17 @@ export default function Home() {
           style={{ width: "calc(100% - 20px)", maxWidth: 370 }}
         >
         <section
-          className="relative overflow-hidden rounded-[24px] px-[16px] pt-[20px] pb-[32px] sm:px-[20px] sm:pt-[24px] sm:pb-[38px]"
+          className="relative overflow-hidden rounded-[24px] px-[16px] pt-[20px] pb-[20px] sm:px-[20px] sm:pt-[24px] sm:pb-[24px]"
           style={{
             background: heroTheme.background,
             color: heroTheme.color,
             boxShadow: heroTheme.boxShadow,
           }}
         >
-          <MayaCalendarMark color={heroTheme.color} />
+          <div
+            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
+            style={{ background: isHeroDark ? "rgba(255,255,255,0.08)" : "rgba(45, 56, 82, 0.18)" }}
+          />
 
           <div className="relative flex items-center justify-between">
             <span
@@ -341,7 +344,9 @@ export default function Home() {
                 color: heroTheme.color,
               }}
             >
-              {heroContent.title}
+              {String(heroContent.title || "").split("\n").map((line, i) => (
+                <span key={i} style={{ display: "block" }}>{line}</span>
+              ))}
             </h1>
             <p
               style={{
@@ -555,54 +560,6 @@ function GrowIn({ children }) {
     >
       {children}
     </Motion.div>
-  );
-}
-
-// Hero decoration for the "Decelera México 2026" card: a spare, geometric nod
-// to the Mesoamerican calendar stone (concentric rings + 20 day-sign ticks)
-// rather than a literal carving — keeps it on-brand (sobria, sin clipart)
-// while reading as more "México" than the plain breathing circle used
-// elsewhere. A soft filled disc sits under the linework so the mark still
-// reads as "something" even where the card crops most of it off-corner;
-// the rings/ticks are the detail you see the closer they sit to center.
-function MayaCalendarMark({ color }) {
-  const ticks = Array.from({ length: 20 }, (_, i) => {
-    const angle = (i / 20) * Math.PI * 2 - Math.PI / 2;
-    const inner = 78;
-    const outer = i % 5 === 0 ? 94 : 99;
-    return {
-      x1: 100 + inner * Math.cos(angle),
-      y1: 100 + inner * Math.sin(angle),
-      x2: 100 + outer * Math.cos(angle),
-      y2: 100 + outer * Math.sin(angle),
-      strong: i % 5 === 0,
-    };
-  });
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 200 200"
-      className="decelera-breathe-mark pointer-events-none absolute -right-9 -bottom-12 h-[270px] w-[270px]"
-      style={{ color }}
-    >
-      <circle cx="100" cy="100" r="100" fill="currentColor" fillOpacity="0.12" />
-      <circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.6" />
-      <circle cx="100" cy="100" r="66" fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.2" />
-      <circle cx="100" cy="100" r="10" fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.2" />
-      {ticks.map((t, i) => (
-        <line
-          key={i}
-          x1={t.x1}
-          y1={t.y1}
-          x2={t.x2}
-          y2={t.y2}
-          stroke="currentColor"
-          strokeOpacity={t.strong ? 0.6 : 0.4}
-          strokeWidth={t.strong ? 1.8 : 1}
-        />
-      ))}
-    </svg>
   );
 }
 
