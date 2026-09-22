@@ -1148,6 +1148,24 @@
   animation: decelera-breathe 4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
+/* Slower, subtler breathe for line-art marks (e.g. the Home hero's rosette)
+   — thin strokes read better with a smaller opacity swing than a filled shape. */
+@keyframes decelera-breathe-line {
+  0%,
+  100% {
+    opacity: 0.26;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.34;
+    transform: scale(1.03);
+  }
+}
+
+.decelera-mx-mark {
+  animation: decelera-breathe-line 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
 /* "Needs your attention" treatment: a gentle float + a soft cyan glow behind a
    card. Applied by <AttentionWrap pulse> only while an action for today is still
    pending (a fresh match to open, a 1:1 to give feedback on); the wrapper is
