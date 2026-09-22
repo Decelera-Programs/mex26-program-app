@@ -200,7 +200,7 @@ export default function TeamNotes() {
           className="relative overflow-hidden"
           style={{ borderRadius: 20, padding: 22, background: "#FAF3DC", color: "#2D3852", boxShadow: "0 18px 40px rgba(31, 208, 239, 0.10)", marginBottom: 18 }}
         >
-          <div className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full" style={{ background: "rgba(45, 56, 82, 0.18)" }} />
+          <div className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full" style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }} />
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
               Team Notes

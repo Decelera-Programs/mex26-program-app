@@ -125,8 +125,8 @@ export default function PersonDetail() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-10 -bottom-16 h-[220px] w-[220px] rounded-full"
-            style={{ background: "rgba(45, 56, 82, 0.28)" }}
+            className="decelera-breathe-mark pointer-events-none absolute h-[220px] w-[220px] rounded-full"
+            style={{ right: -40, bottom: -64, background: "rgba(45, 56, 82, 0.28)" }}
           />
           <Motion.div
             initial={{ opacity: 0, y: 20 }}

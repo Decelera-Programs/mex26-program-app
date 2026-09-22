@@ -111,8 +111,8 @@ export default function MediaKit() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
-            style={{ background: "rgba(45, 56, 82, 0.18)" }}
+            className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full"
+            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }}
           />
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
