@@ -261,25 +261,6 @@
     color: #9a4d1c;
   }
 
-  .event-detail-about-title {
-    padding-left: 1rem;
-  }
-
-  .event-detail-about-text {
-    padding-left: 1rem;
-  }
-
-  .event-detail-title-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .event-detail-type-tag {
-    margin-left: 0.4rem;
-    margin-top: 0;
-  }
-
   .startup-website-link {
     background-color: transparent;
     padding: 0.8rem 1rem;
@@ -295,83 +276,6 @@
 
   .startup-website-link-text {
     padding-left: 0.45rem;
-  }
-
-  .event-detail-info-row {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .event-detail-info-icon {
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 2.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    border: 1px solid rgba(31, 208, 239, 0.15);
-    background: rgba(31, 208, 239, 0.10);
-    margin-top: 0;
-    margin-left: 0;
-  }
-
-  .event-detail-info-content {
-    flex: 1;
-    min-width: 0;
-    padding-right: 1.25rem;
-  }
-
-  .event-detail-rating-stars {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding-left: 1rem;
-    padding-bottom: 0.4rem;
-  }
-
-  .event-modal-header {
-    position: relative;
-    padding: 1rem 1.25rem 0.5rem;
-    background: #F2F8FA;
-    color: #2D3852;
-  }
-
-  .event-modal-hero {
-    position: relative;
-    border-radius: 1.25rem; /* 20px */
-    background: #FAF3DC; /* arena */
-    border: 1px solid #EEF2F5;
-    padding: 1.25rem 1.25rem 1rem;
-    box-shadow: 0 10px 26px rgba(45, 56, 82, 0.08);
-    overflow: hidden;
-  }
-
-  .event-modal-back-btn {
-    margin-bottom: 1.25rem;
-  }
-
-  .event-modal-description {
-    margin-top: 0.95rem;
-    margin-left: 0;
-    margin-right: 0;
-    color: #2D3852;
-    opacity: 0.85;
-  }
-
-  .event-modal-content {
-    padding: 1.25rem 1.75rem 1.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  .event-modal-detail-card {
-    border-radius: 1.25rem; /* 20px */
-    border: 1px solid #EEF2F5;
-    background-color: #FFFFFF;
-    padding: 1rem 1.1rem;
   }
 
   .card-list > * + * {
