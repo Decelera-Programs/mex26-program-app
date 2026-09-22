@@ -303,7 +303,7 @@ export default function Home() {
           }}
         >
           <div
-            className="decelera-mx-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px]"
+            className="decelera-mx-mark pointer-events-none absolute -right-[30px] -bottom-[34px] h-[125px] w-[125px]"
             style={{ color: heroTheme.color }}
           >
             <DeceleraRosetteMark />
