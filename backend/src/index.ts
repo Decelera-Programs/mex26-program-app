@@ -199,6 +199,19 @@ async function resolveAccessibleOneOnOneForPerson(
   });
 }
 
+// Every Notification row is just a `message` string — there's no dedicated
+// title column. Campaigns already carry a real title; everything else
+// (event reminders, match pings, feedback nudges) used to fall back to a
+// blank in-app title / a generic "Decelera México" push title, which made
+// every non-campaign notification look identical. Give event-linked ones
+// a real "Reminder" title since that's unambiguous; leave the rest on the
+// generic fallback rather than guess a label that could be wrong.
+function resolveNotificationTitle(input: { campaignTitle?: string | null; eventId?: string | null }) {
+  if (input.campaignTitle) return input.campaignTitle;
+  if (input.eventId) return "Reminder";
+  return "Decelera México";
+}
+
 async function dispatchDuePushNotifications(now = new Date()) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return { processed: 0, pushed: 0 };
 
@@ -234,7 +247,7 @@ async function dispatchDuePushNotifications(now = new Date()) {
     }
     const campaignTitle = notification.campaignRecipients?.[0]?.campaign?.title;
     const payload = JSON.stringify({
-      title: campaignTitle || "Decelera México",
+      title: resolveNotificationTitle({ campaignTitle, eventId: notification.event_id }),
       body: notification.message,
       eventId: notification.event_id ?? null,
       // Any match-linked notification (daily match, "quiero hablar" ping,
@@ -2194,7 +2207,10 @@ app.get("/users/:userId/notifications", async (req, res) => {
     res.json(
       notifs.map((n) => ({
         ...n,
-        title: n.campaignRecipients?.[0]?.campaign?.title ?? null,
+        title: resolveNotificationTitle({
+          campaignTitle: n.campaignRecipients?.[0]?.campaign?.title,
+          eventId: n.event_id,
+        }),
         counterpart_person_id: n.match ? (n.match.founder_id === userId ? n.match.em_id : n.match.founder_id) : null,
         campaignRecipients: undefined,
         match: undefined,

@@ -51,7 +51,7 @@ export async function triggerThirtyMinuteReminders(now = new Date()) {
       if (already) continue;
 
       const mins = minutesBetween(now, evt.start_time);
-      const message = `${evt.title} starts in ~${mins} minutes · ${evt.location}`;
+      const message = `${evt.title} starts in ~${mins} minutes${evt.location ? ` · ${evt.location}` : ""}`;
 
       await prisma.notification.create({
         data: {
