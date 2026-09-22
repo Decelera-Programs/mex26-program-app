@@ -3,7 +3,7 @@ import { getCurrentUser, getHomeDailyContent, getMyMatches, getOneOnOneAudio, li
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
-import { CalendarDays, ChevronRight, MapPin, Users, Play, Pause, Mic } from "lucide-react";
+import { CalendarDays, ChevronRight, MapPin, Users } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
@@ -24,11 +24,6 @@ const FALLBACK_HERO_CONTENT = {
   })(),
   body_text: "Slow down before you scale. We start the week soft - long walks, no laptops before lunch, dinners that run late.",
   reflection_text: "What would today look like if you trusted the week to do its work?",
-};
-
-const FALLBACK_PODCAST = {
-  url: "https://ewhruuwvarxthbgimxyf.supabase.co/storage/v1/object/public/podcasts/WElcome%20to%20decelera.m4a",
-  title: "Welcome to Decelera",
 };
 
 function dateKeyInProgramTz(raw) {
@@ -99,7 +94,6 @@ export default function Home() {
 
   const navigate = useNavigate();
   const [heroContent, setHeroContent] = useState(FALLBACK_HERO_CONTENT);
-  const [podcastContent, setPodcastContent] = useState(FALLBACK_PODCAST);
   const [events, setEvents] = useState([]);
   const [peoplePreview, setPeoplePreview] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -158,11 +152,6 @@ export default function Home() {
             subtitle: homeData.subtitle || FALLBACK_HERO_CONTENT.subtitle,
             body_text: homeData.body_text || FALLBACK_HERO_CONTENT.body_text,
             reflection_text: homeData.reflection_text || FALLBACK_HERO_CONTENT.reflection_text,
-          });
-          setPodcastContent({
-            url: homeData.podcast_url || FALLBACK_PODCAST.url,
-            title: homeData.podcast_title || FALLBACK_PODCAST.title,
-            duration: homeData.podcast_duration_sec || null,
           });
         }
         if (Array.isArray(peopleData) && peopleData.length) {
@@ -313,10 +302,7 @@ export default function Home() {
             boxShadow: heroTheme.boxShadow,
           }}
         >
-          <div
-            className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px] rounded-full"
-            style={{ background: isHeroDark ? "rgba(255,255,255,0.08)" : "rgba(45, 56, 82, 0.18)" }}
-          />
+          <MayaCalendarMark tone={isHeroDark ? "rgba(255,255,255,0.16)" : "rgba(45, 56, 82, 0.24)"} />
 
           <div className="relative flex items-center justify-between">
             <span
@@ -368,9 +354,6 @@ export default function Home() {
             >
               {heroContent.subtitle}
             </p>
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${isHeroDark ? "rgba(255,255,255,0.15)" : "rgba(45,56,82,0.18)"}` }}>
-              <DailyPodcastCard podcast={podcastContent} dark={isHeroDark} />
-            </div>
           </div>
         </section>
 
@@ -575,161 +558,39 @@ function GrowIn({ children }) {
   );
 }
 
-function DailyPodcastCard({ podcast, dark = false }) {
-  const audioRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(podcast?.duration || 0);
-  const [loading, setLoading] = useState(false);
-
-  const url = podcast?.url || FALLBACK_PODCAST.url;
-  const title = podcast?.title || FALLBACK_PODCAST.title;
-
-  function togglePlay() {
-    if (!audioRef.current || !url) return;
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-  }
-
-  function handleSeek(e) {
-    if (!audioRef.current || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    audioRef.current.currentTime = ratio * duration;
-  }
-
-  function formatTime(sec) {
-    if (!sec || Number.isNaN(sec)) return "0:00";
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  }
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const hasAudio = Boolean(url);
+// Hero decoration for the "Decelera." card: a spare, geometric nod to the
+// Mesoamerican calendar stone (concentric rings + 20 day-sign ticks) rather
+// than a literal carving — keeps it on-brand (sobria, sin clipart) while
+// reading as more "México" than the plain breathing circle used elsewhere.
+function MayaCalendarMark({ tone }) {
+  const ticks = Array.from({ length: 20 }, (_, i) => {
+    const angle = (i / 20) * Math.PI * 2 - Math.PI / 2;
+    const inner = 80;
+    const outer = i % 5 === 0 ? 92 : 96;
+    return {
+      x1: 100 + inner * Math.cos(angle),
+      y1: 100 + inner * Math.sin(angle),
+      x2: 100 + outer * Math.cos(angle),
+      y2: 100 + outer * Math.sin(angle),
+      strong: i % 5 === 0,
+    };
+  });
 
   return (
-    <div>
-      {hasAudio && (
-        <audio
-          ref={audioRef}
-          src={url}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => { setPlaying(false); setCurrentTime(0); }}
-          onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-          onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-          onWaiting={() => setLoading(true)}
-          onCanPlay={() => setLoading(false)}
-        />
-      )}
-
-      <p
-        className="uppercase"
-        style={{ fontSize: "11px", letterSpacing: "0.14em", fontWeight: 500, color: dark ? "rgba(255,255,255,0.55)" : "rgba(45,56,82,0.55)", margin: 0 }}
-      >
-        Daily podcast
-      </p>
-
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginTop: 8 }}>
-        <button
-          type="button"
-          onClick={togglePlay}
-          disabled={!hasAudio || loading}
-          style={{
-            flexShrink: 0,
-            width: 48,
-            height: 48,
-            borderRadius: "9999px",
-            background: dark
-              ? (hasAudio ? "#FAF3DC" : "rgba(255,255,255,0.12)")
-              : (hasAudio ? "#2D3852" : "rgba(45,56,82,0.12)"),
-            border: "none",
-            cursor: hasAudio ? "pointer" : "default",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "all 160ms cubic-bezier(.16,1,.3,1)",
-          }}
-        >
-          {loading ? (
-            <span style={{ width: 16, height: 16, borderRadius: "9999px", border: dark ? "2px solid rgba(45,56,82,0.4)" : "2px solid rgba(250,243,220,0.4)", borderTopColor: dark ? "#2D3852" : "#FAF3DC", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
-          ) : playing ? (
-            <Pause size={18} color={dark ? "#2D3852" : "#FAF3DC"} />
-          ) : (
-            <Play size={18} color={dark ? "#2D3852" : (hasAudio ? "#FAF3DC" : "#2D3852")} style={{ marginLeft: 2 }} />
-          )}
-        </button>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p
-            style={{
-              fontFamily: "Taviraj, serif",
-              fontWeight: 300,
-              fontStyle: "italic",
-              fontSize: "17px",
-              lineHeight: 1.3,
-              color: dark ? "#FFFFFF" : "#2D3852",
-              margin: 0,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {title || (
-              <span style={{ opacity: 0.4 }}>Daily podcast coming soon</span>
-            )}
-          </p>
-
-          <div
-            role="slider"
-            aria-label="Progress"
-            aria-valuenow={Math.round(progress)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            onClick={handleSeek}
-            style={{
-              marginTop: 12,
-              height: 4,
-              borderRadius: 99,
-              background: dark ? "rgba(255,255,255,0.2)" : "rgba(45,56,82,0.13)",
-              cursor: hasAudio ? "pointer" : "default",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                height: "100%",
-                width: `${progress}%`,
-                borderRadius: 99,
-                background: dark ? "#FAF3DC" : "#2D3852",
-                transition: "width 0.25s linear",
-              }}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: 6,
-              fontSize: "10.5px",
-              color: dark ? "rgba(255,255,255,0.45)" : "rgba(45,56,82,0.45)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-        </div>
-      </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 200 200"
+      fill="none"
+      className="decelera-breathe-mark pointer-events-none absolute -right-14 -bottom-14 h-[210px] w-[210px]"
+      style={{ color: tone }}
+    >
+      <circle cx="100" cy="100" r="96" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="100" cy="100" r="68" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="100" cy="100" r="10" stroke="currentColor" strokeWidth="1.1" />
+      {ticks.map((t, i) => (
+        <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="currentColor" strokeWidth={t.strong ? 1.8 : 1} />
+      ))}
+    </svg>
   );
 }
 
