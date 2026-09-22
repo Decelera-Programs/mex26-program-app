@@ -5,6 +5,7 @@ import { motion as Motion } from "framer-motion";
 import { getCurrentUser, getPersonById, getStartupById } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 const typeLabels = {
   experience_maker: "Experience Maker",
@@ -125,9 +126,11 @@ export default function PersonDetail() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute h-[220px] w-[220px] rounded-full"
-            style={{ right: -40, bottom: -64, background: "rgba(45, 56, 82, 0.28)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -40, bottom: -64, height: 220, width: 220, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <Motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

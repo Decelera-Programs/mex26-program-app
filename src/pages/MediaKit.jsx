@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion as Motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 const DAY_META = [
   { day: 1, gradient: "linear-gradient(135deg, #3de8f0 0%, #22b4e8 100%)" },
@@ -111,9 +112,11 @@ export default function MediaKit() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
               Moments

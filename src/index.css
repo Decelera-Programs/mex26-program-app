@@ -1036,24 +1036,9 @@
   flex-direction: column;
 }
 
-@keyframes decelera-breathe {
-  0%,
-  100% {
-    opacity: 0.1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.18;
-    transform: scale(1.04);
-  }
-}
-
-.decelera-breathe-mark {
-  animation: decelera-breathe 4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-/* Slower, subtler breathe for line-art marks (e.g. the Home hero's rosette)
-   — thin strokes read better with a smaller opacity swing than a filled shape. */
+/* Slower, subtler breathe for the rosette line-art marks used across every
+   hero card header — thin strokes read better with a smaller opacity swing
+   than a filled shape. */
 @keyframes decelera-breathe-line {
   0%,
   100% {

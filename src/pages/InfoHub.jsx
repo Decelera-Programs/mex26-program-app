@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Rocket, Users, MapPin, Palette, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "../api/dataService";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 const MAPS_URL = "https://maps.app.goo.gl/SX1QnkxGqsaV1qu8A";
 
@@ -46,9 +47,11 @@ export default function InfoHub() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
               Info

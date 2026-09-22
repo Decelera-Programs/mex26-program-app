@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { supabase, supabaseConfigError, initialAuthSearch, initialAuthHash } from "../lib/supabaseClient";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 export default function ResetPassword() {
   // "request" → send reset email | "recovery" → set new password | "done" → email sent
@@ -134,9 +135,11 @@ export default function ResetPassword() {
           }}
         >
           <div
-            className="pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.08)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <p
             style={{
               fontSize: 11,

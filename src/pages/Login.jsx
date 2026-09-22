@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase, supabaseConfigError } from "../lib/supabaseClient";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 
 export default function Login() {
@@ -286,9 +287,11 @@ export default function Login() {
           }}
         >
           <div
-            className="pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.08)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <p
             style={{
               fontSize: 11,

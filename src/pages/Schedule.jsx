@@ -8,6 +8,7 @@ import { getHomeDailyContent, listEvents } from "../api/dataService";
 import { formatDayKey as eventDayKeyInTimezone } from "../lib/dateTime";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 const BASE_HOUR_HEIGHT = 112.5;
 const CALENDAR_START_HOUR = 7;
@@ -429,9 +430,11 @@ export default function Schedule() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: headerTheme.textColor }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between gap-4">
             <div>
               <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: headerTheme.textColor, margin: 0 }}>

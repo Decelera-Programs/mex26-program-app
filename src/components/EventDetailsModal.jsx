@@ -5,6 +5,7 @@ import moment from "moment";
 import { motion as Motion } from "framer-motion";
 import { getEventById, listEventPeople } from "../api/dataService";
 import PersonCard from "./PersonCard";
+import DeceleraRosetteMark from "./DeceleraRosetteMark";
 import Loader from "./Loader";
 import { SPRING } from "../lib/motion";
 
@@ -134,16 +135,11 @@ export default function EventDetailsModal({ eventId, onClose }) {
             }}
           >
             <div
-              className="decelera-breathe-mark pointer-events-none absolute"
-              style={{
-                right: -48,
-                bottom: -48,
-                height: 170,
-                width: 170,
-                borderRadius: 9999,
-                background: "rgba(45, 56, 82, 0.14)",
-              }}
-            />
+              className="decelera-mx-mark pointer-events-none absolute"
+              style={{ right: -48, bottom: -48, height: 170, width: 170, color: "#2D3852" }}
+            >
+              <DeceleraRosetteMark />
+            </div>
             <h1
               style={{
                 position: "relative",

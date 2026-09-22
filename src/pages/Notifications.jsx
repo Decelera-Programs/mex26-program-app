@@ -11,6 +11,7 @@ import {
   subscribePush,
 } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
+import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 import LoadingState from "../components/LoadingState";
 import { formatRelativeTime } from "../lib/dateTime";
 import { SPRING, stagger } from "../lib/motion";
@@ -174,9 +175,11 @@ export default function Notifications() {
           }}
         >
           <div
-            className="decelera-breathe-mark pointer-events-none absolute h-[210px] w-[210px] rounded-full"
-            style={{ right: -56, bottom: -56, background: "rgba(45, 56, 82, 0.18)" }}
-          />
+            className="decelera-mx-mark pointer-events-none absolute"
+            style={{ right: -56, bottom: -56, height: 210, width: 210, color: "#2D3852" }}
+          >
+            <DeceleraRosetteMark />
+          </div>
           <Motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between gap-4">
             <div>
               <h1 style={{ fontFamily: "Taviraj, serif", fontWeight: 300, fontSize: 28, color: "#2D3852", margin: 0 }}>
