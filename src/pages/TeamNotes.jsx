@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
-import { Building2, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, Square, Upload, User, X } from "lucide-react";
+import { Building2, Check, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, Square, Upload, User, X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -99,7 +99,6 @@ export default function TeamNotes() {
 
   const isRecording = audioUi.status === "recording";
   const isUploading = audioUi.status === "uploading";
-  const hasPendingAudio = Boolean(audioUi.file);
 
   async function startRecording() {
     try {
@@ -180,11 +179,6 @@ export default function TeamNotes() {
     setSearch("");
     setAudioUi({});
     setComposerOpen(false);
-  }
-
-  function formatDuration(seconds) {
-    const safe = Number(seconds) || 0;
-    return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
   }
 
   const targetName = selectedTarget
@@ -391,48 +385,48 @@ export default function TeamNotes() {
                       <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", marginBottom: 8 }}>
                         Record your note
                       </p>
-                      <div className="one-on-one-audio-composer">
-                        <button
-                          type="button"
-                          onClick={() => isRecording ? stopRecording() : startRecording()}
-                          className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
-                        >
-                          {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                        </button>
-                        <div className="one-on-one-audio-track">
-                          {isRecording || isUploading ? (
-                            <div className="one-on-one-audio-wave">
-                              {Array.from({ length: 18 }).map((_, waveIdx) => (
-                                <Motion.span
-                                  key={waveIdx}
-                                  className="one-on-one-audio-wave-bar"
-                                  animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
-                                  transition={{ duration: 1.1, repeat: Number.POSITIVE_INFINITY, delay: waveIdx * 0.04 }}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="one-on-one-audio-caption">
-                              {audioUi.status === "success"
-                                ? "Sent!"
-                                : audioUi.previewUrl
-                                  ? `Ready (${formatDuration(audioUi.durationSec || 0)})`
-                                  : "Tap mic to record"}
-                            </p>
-                          )}
+                      {audioUi.previewUrl ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <AudioPlayer src={audioUi.previewUrl} />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={uploadNote}
+                            disabled={isUploading || audioUi.status === "success"}
+                            className="one-on-one-audio-send-btn"
+                          >
+                            {audioUi.status === "success" ? <Check className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={uploadNote}
-                          disabled={!hasPendingAudio || isUploading}
-                          className="one-on-one-audio-send-btn"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      {audioUi.previewUrl && audioUi.status !== "success" && (
-                        <div style={{ marginTop: 10 }}>
-                          <AudioPlayer src={audioUi.previewUrl} />
+                      ) : (
+                        <div className="one-on-one-audio-composer">
+                          <button
+                            type="button"
+                            onClick={() => isRecording ? stopRecording() : startRecording()}
+                            className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
+                          >
+                            {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                          </button>
+                          <div className="one-on-one-audio-track">
+                            {isRecording ? (
+                              <div className="one-on-one-audio-wave">
+                                {Array.from({ length: 18 }).map((_, waveIdx) => (
+                                  <Motion.span
+                                    key={waveIdx}
+                                    className="one-on-one-audio-wave-bar"
+                                    animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
+                                    transition={{ duration: 1.1, repeat: Number.POSITIVE_INFINITY, delay: waveIdx * 0.04 }}
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="one-on-one-audio-caption">Tap mic to record</p>
+                            )}
+                          </div>
+                          <button type="button" disabled className="one-on-one-audio-send-btn">
+                            <Upload className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       )}
                       {audioUi.error && (
