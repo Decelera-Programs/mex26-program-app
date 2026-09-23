@@ -1861,9 +1861,13 @@ const teamNoteSchema = z
     mime_type: z.string().max(255).optional(),
     file_size_bytes: z.number().int().positive().max(250 * 1024 * 1024).optional(),
     duration_sec: z.number().int().positive().max(24 * 60 * 60).optional(),
-    status: z.enum(["uploaded", "failed"]),
+    // "transcribed" here means a note typed directly (no audio) — stored the
+    // same way an audio note looks once the transcription job has finished
+    // it, so it renders identically in the list either way.
+    status: z.enum(["uploaded", "failed", "transcribed"]),
     error_message: z.string().max(2000).optional(),
     notes: z.string().max(5000).optional(),
+    transcript_text: z.string().min(1).max(5000).optional(),
   })
   .strict();
 
@@ -1950,6 +1954,10 @@ app.post("/team-notes", async (req, res) => {
       res.status(400).json({ error: "storage_path is required for uploaded notes" });
       return;
     }
+    if (payload.status === "transcribed" && !payload.transcript_text) {
+      res.status(400).json({ error: "transcript_text is required for text notes" });
+      return;
+    }
 
     const created = await prisma.teamAudioNote.create({
       data: {
@@ -1965,6 +1973,8 @@ app.post("/team-notes", async (req, res) => {
         status: payload.status,
         error_message: payload.error_message || null,
         notes: payload.notes || null,
+        transcript_text: payload.transcript_text || null,
+        transcribed_at: payload.status === "transcribed" ? new Date() : null,
       },
     });
 

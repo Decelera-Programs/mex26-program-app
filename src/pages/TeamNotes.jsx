@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
-import { Building2, Check, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, Square, Upload, User, X } from "lucide-react";
+import { Building2, Check, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, PenLine, Square, Upload, User, X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -33,7 +33,10 @@ export default function TeamNotes() {
   const [targetType, setTargetType] = useState("startup");
   const [search, setSearch] = useState("");
   const [selectedTarget, setSelectedTarget] = useState(null);
+  const [noteMode, setNoteMode] = useState(null); // null | "audio" | "text"
   const [audioUi, setAudioUi] = useState({});
+  const [textNote, setTextNote] = useState("");
+  const [textUi, setTextUi] = useState({});
 
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -171,13 +174,44 @@ export default function TeamNotes() {
     }
   }
 
+  async function sendTextNote() {
+    if (!selectedTarget || !textNote.trim()) return;
+    setTextUi({ status: "sending" });
+    const targetId = selectedTarget.id;
+    try {
+      await submitTeamAudioNote({
+        target_type: targetType,
+        ...(targetType === "startup" ? { startup_id: targetId } : { founder_id: targetId }),
+        status: "transcribed",
+        transcript_text: textNote.trim(),
+      });
+      const refreshed = await listMyTeamNotes();
+      setNotes(refreshed);
+      setTextUi({ status: "success" });
+      setTimeout(() => {
+        setComposerOpen(false);
+        setSelectedTarget(null);
+        setSearch("");
+        setNoteMode(null);
+        setTextNote("");
+        setTextUi({});
+      }, 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not send note.";
+      setTextUi({ status: "error", error: message });
+    }
+  }
+
   function resetComposer() {
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
     setSelectedTarget(null);
     setSearch("");
+    setNoteMode(null);
     setAudioUi({});
+    setTextNote("");
+    setTextUi({});
     setComposerOpen(false);
   }
 
@@ -258,7 +292,7 @@ export default function TeamNotes() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => { setTargetType(key); setSelectedTarget(null); setSearch(""); setAudioUi({}); }}
+                        onClick={() => { setTargetType(key); setSelectedTarget(null); setSearch(""); setNoteMode(null); setAudioUi({}); setTextNote(""); setTextUi({}); }}
                         style={{
                           flex: 1,
                           borderRadius: 10,
@@ -305,7 +339,7 @@ export default function TeamNotes() {
                       <span style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", flex: 1 }}>{targetName}</span>
                       <button
                         type="button"
-                        onClick={() => { setSelectedTarget(null); setAudioUi({}); }}
+                        onClick={() => { setSelectedTarget(null); setNoteMode(null); setAudioUi({}); setTextNote(""); setTextUi({}); }}
                         style={{ border: 0, background: "transparent", cursor: "pointer", color: "#6E7892", padding: 2, display: "flex" }}
                       >
                         <X className="h-3.5 w-3.5" />
@@ -343,7 +377,7 @@ export default function TeamNotes() {
                             <button
                               key={item.id}
                               type="button"
-                              onClick={() => { setSelectedTarget(item); setSearch(""); setAudioUi({}); }}
+                              onClick={() => { setSelectedTarget(item); setSearch(""); setNoteMode(null); setAudioUi({}); setTextNote(""); setTextUi({}); }}
                               className="hover:bg-[#F2F8FA]"
                               style={{
                                 width: "100%",
@@ -380,11 +414,154 @@ export default function TeamNotes() {
                   )}
 
                   {/* Recorder — shown only after picking a target */}
-                  {selectedTarget && (
+                  {selectedTarget && !noteMode && (
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4EAF0" }}>
                       <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", marginBottom: 8 }}>
-                        Record your note
+                        What do you want to send?
                       </p>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => setNoteMode("audio")}
+                          style={{
+                            flex: 1,
+                            borderRadius: 10,
+                            border: "1.5px solid #E4EAF0",
+                            background: "transparent",
+                            color: "#6E7892",
+                            padding: "10px 0",
+                            fontFamily: "Fustat, sans-serif",
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <Mic className="h-3.5 w-3.5" /> Audio
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNoteMode("text")}
+                          style={{
+                            flex: 1,
+                            borderRadius: 10,
+                            border: "1.5px solid #E4EAF0",
+                            background: "transparent",
+                            color: "#6E7892",
+                            padding: "10px 0",
+                            fontFamily: "Fustat, sans-serif",
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <PenLine className="h-3.5 w-3.5" /> Text
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Text note */}
+                  {selectedTarget && noteMode === "text" && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4EAF0" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", margin: 0 }}>
+                          Write your note
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setNoteMode(null)}
+                          style={{ border: 0, background: "transparent", cursor: "pointer", color: "#6E7892", fontSize: 11, fontWeight: 600, padding: 0 }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                      <textarea
+                        value={textNote}
+                        onChange={(e) => setTextNote(e.target.value)}
+                        placeholder="Type your note…"
+                        disabled={textUi.status === "sending" || textUi.status === "success"}
+                        style={{
+                          width: "100%",
+                          minHeight: 90,
+                          borderRadius: 12,
+                          border: "1.5px solid #E4EAF0",
+                          padding: "10px 12px",
+                          fontSize: 13,
+                          color: "#2D3852",
+                          fontFamily: "Fustat, sans-serif",
+                          outline: "none",
+                          background: "#FFFFFF",
+                          boxSizing: "border-box",
+                          resize: "vertical",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={sendTextNote}
+                        disabled={!textNote.trim() || textUi.status === "sending" || textUi.status === "success"}
+                        style={{
+                          width: "100%",
+                          marginTop: 10,
+                          borderRadius: 12,
+                          border: "none",
+                          background: textUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
+                          color: textUi.status === "success" ? "#6E7892" : "#2D3852",
+                          padding: "10px 0",
+                          fontFamily: "Fustat, sans-serif",
+                          fontWeight: 700,
+                          fontSize: 13,
+                          cursor: !textNote.trim() || textUi.status === "sending" || textUi.status === "success" ? "default" : "pointer",
+                          opacity: textUi.status === "sending" ? 0.65 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          transition: "opacity 0.15s",
+                        }}
+                      >
+                        {textUi.status === "success" ? (
+                          <>
+                            <Check size={14} /> Sent
+                          </>
+                        ) : textUi.status === "sending" ? (
+                          "Sending…"
+                        ) : (
+                          <>
+                            <Upload size={14} /> Send
+                          </>
+                        )}
+                      </button>
+                      {textUi.error && (
+                        <p className="text-[11px] mt-1" style={{ color: "#D9534F" }}>{textUi.error}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Audio note */}
+                  {selectedTarget && noteMode === "audio" && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4EAF0" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", margin: 0 }}>
+                          Record your note
+                        </p>
+                        {!audioUi.previewUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setNoteMode(null)}
+                            style={{ border: 0, background: "transparent", cursor: "pointer", color: "#6E7892", fontSize: 11, fontWeight: 600, padding: 0 }}
+                          >
+                            Change
+                          </button>
+                        )}
+                      </div>
                       {audioUi.previewUrl ? (
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
