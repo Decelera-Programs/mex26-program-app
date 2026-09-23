@@ -17,6 +17,29 @@ import AudioPlayer from "../components/AudioPlayer";
 import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 
+// Survives the tab getting killed when the phone switches apps (common on
+// iOS Safari/PWA) — a typed note that isn't sent yet is just a draft, not
+// something the OS should be allowed to throw away.
+const TEXT_DRAFT_KEY = "decelera.teamNotes.textDraft";
+
+function loadTextDraft() {
+  try {
+    const raw = localStorage.getItem(TEXT_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTextDraft(draft) {
+  try {
+    if (!draft) localStorage.removeItem(TEXT_DRAFT_KEY);
+    else localStorage.setItem(TEXT_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // best-effort — losing the draft-persistence is not worth surfacing an error for
+  }
+}
+
 export default function TeamNotes() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -42,6 +65,8 @@ export default function TeamNotes() {
   const mediaStreamRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingStartedAtRef = useRef(0);
+  const wakeLockRef = useRef(null);
+  const draftRestoredRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +80,25 @@ export default function TeamNotes() {
         const [startups, people] = await Promise.all([listStartups(), listPeople()]);
         if (cancelled) return;
         setAllStartups(startups || []);
-        setAllPeople((people || []).filter((p) => !p.contact_type || p.contact_type === "founder" || p.startup_id));
+        const filteredPeople = (people || []).filter((p) => !p.contact_type || p.contact_type === "founder" || p.startup_id);
+        setAllPeople(filteredPeople);
+
+        // Restore a text draft left over from before the tab was killed.
+        if (!draftRestoredRef.current) {
+          draftRestoredRef.current = true;
+          const draft = loadTextDraft();
+          if (draft?.textNote) {
+            const list = draft.targetType === "founder" ? filteredPeople : (startups || []);
+            const target = list.find((t) => t.id === draft.targetId);
+            if (target) {
+              setTargetType(draft.targetType);
+              setSelectedTarget(target);
+              setNoteMode("text");
+              setTextNote(draft.textNote);
+              setComposerOpen(true);
+            }
+          }
+        }
         try {
           const existingNotes = await listMyTeamNotes();
           if (cancelled) return;
@@ -70,6 +113,17 @@ export default function TeamNotes() {
     fetchData();
     return () => { cancelled = true; };
   }, []);
+
+  // Keep the text draft in localStorage in sync so it survives the tab
+  // getting killed (switching apps on mobile) before it's sent.
+  useEffect(() => {
+    if (!draftRestoredRef.current) return; // don't clobber the draft while it's still loading
+    if (noteMode === "text" && selectedTarget && textNote.trim()) {
+      saveTextDraft({ targetType, targetId: selectedTarget.id, textNote });
+    } else {
+      saveTextDraft(null);
+    }
+  }, [noteMode, selectedTarget, targetType, textNote]);
 
   const filteredTargets = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -112,19 +166,53 @@ export default function TeamNotes() {
       recordingStartedAtRef.current = Date.now();
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
+
+      // Prevent the screen from locking during recording — the single
+      // biggest cause of an accidentally-cut-off recording.
+      try {
+        if (navigator.wakeLock) {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+        }
+      } catch {
+        // best-effort — recording still works without it
+      }
+
+      // Detect mic interruption (incoming call, OS reclaiming the mic,
+      // the tab getting backgrounded/suspended, etc.) and stop cleanly
+      // instead of silently losing the recording.
+      stream.getTracks().forEach((track) => {
+        track.onended = () => {
+          if (mediaRecorderRef.current?.state !== "inactive") {
+            mediaRecorderRef.current.stop();
+            setAudioUi((prev) => ({ ...prev, interrupted: true }));
+          }
+        };
+      });
+
       recorder.ondataavailable = (event) => {
         if (event.data?.size > 0) recordingChunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
+        wakeLockRef.current?.release();
+        wakeLockRef.current = null;
         const durationSec = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000));
         const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" });
         const file = new File([blob], `team-note-${Date.now()}.webm`, { type: recorder.mimeType || "audio/webm" });
         const previewUrl = URL.createObjectURL(blob);
-        setAudioUi({ status: "stopped", blob, file, previewUrl, durationSec, error: "" });
+        setAudioUi((prev) => ({
+          status: "stopped",
+          blob,
+          file,
+          previewUrl,
+          durationSec,
+          error: prev.interrupted ? "The microphone was interrupted. You can still send the partial recording." : "",
+        }));
         stream.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
       };
-      recorder.start();
+      // Flush data every second instead of only at stop() — if recording
+      // gets killed abruptly, whatever was already flushed is still usable.
+      recorder.start(1000);
       setAudioUi({ status: "recording", error: "" });
     } catch (error) {
       setAudioUi({ status: "error", error: error instanceof Error ? error.message : "Microphone not available." });
