@@ -13,6 +13,7 @@ import {
 } from "../api/dataService";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import AudioPlayer from "../components/AudioPlayer";
 import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 
@@ -430,7 +431,9 @@ export default function TeamNotes() {
                         </button>
                       </div>
                       {audioUi.previewUrl && audioUi.status !== "success" && (
-                        <audio controls src={audioUi.previewUrl} className="w-full mt-2" />
+                        <div style={{ marginTop: 10 }}>
+                          <AudioPlayer src={audioUi.previewUrl} />
+                        </div>
                       )}
                       {audioUi.error && (
                         <p className="text-[11px] mt-1" style={{ color: "#D9534F" }}>{audioUi.error}</p>
@@ -522,16 +525,11 @@ export default function TeamNotes() {
                       </span>
                     </div>
 
-                    {/* Duration */}
-                    {note.duration_sec > 0 && (
-                      <p style={{ fontSize: 11, color: "#6E7892", marginBottom: 6 }}>
-                        {formatDuration(note.duration_sec)}
-                      </p>
-                    )}
-
                     {/* Audio player */}
                     {note.playback_url && (
-                      <audio controls src={note.playback_url} className="w-full" style={{ borderRadius: 8 }} />
+                      <div style={{ marginTop: 4 }}>
+                        <AudioPlayer src={note.playback_url} />
+                      </div>
                     )}
 
                     {/* Transcript toggle */}
