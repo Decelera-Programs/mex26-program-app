@@ -456,9 +456,6 @@ export default function TeamNotes() {
                               <p className="one-on-one-audio-caption">Tap mic to record</p>
                             )}
                           </div>
-                          <button type="button" disabled className="one-on-one-audio-send-btn">
-                            <Upload className="h-3.5 w-3.5" />
-                          </button>
                         </div>
                       )}
                       {audioUi.error && (

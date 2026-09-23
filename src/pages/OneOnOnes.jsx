@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Clock, MapPin, Mic, Square, Upload, Users } from "lucide-react";
+import { Check, ChevronRight, Clock, MapPin, Mic, Square, Upload, Users } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -18,6 +18,7 @@ import {
 } from "../lib/dateTime";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import AudioPlayer from "../components/AudioPlayer";
 import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import { SPRING, stagger } from "../lib/motion";
@@ -377,7 +378,6 @@ export default function OneOnOnes() {
                     const audioData = audioDataByMeeting[item.id] || {};
                     const isRecording = audioUi.status === "recording";
                     const isUploading = audioUi.status === "uploading";
-                    const hasPendingAudio = Boolean(audioUi.file);
                     const activeDuration = audioData?.active_audio?.duration_sec || 0;
 
                     return (
@@ -534,60 +534,85 @@ export default function OneOnOnes() {
                                         <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Scalability</span> — potential to grow significantly</li>
                                       </ul>
                                     </div>
-                                    <div className="one-on-one-audio-composer">
-                                      <button
-                                        type="button"
-                                        onClick={() => (isRecording ? stopRecording(item.id) : startRecording(item.id))}
-                                        disabled={!canSubmitAudio}
-                                        className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
-                                      >
-                                        {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                                      </button>
-
-                                      <div className="one-on-one-audio-track">
-                                        {isRecording ? (
-                                          <div className="one-on-one-audio-wave">
-                                            {Array.from({ length: 18 }).map((_, waveIndex) => (
-                                              <Motion.span
-                                                key={waveIndex}
-                                                className="one-on-one-audio-wave-bar"
-                                                animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
-                                                transition={{
-                                                  duration: 1.1,
-                                                  repeat: Number.POSITIVE_INFINITY,
-                                                  delay: waveIndex * 0.04,
-                                                }}
-                                              />
-                                            ))}
-                                          </div>
-                                        ) : isUploading ? (
-                                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                            <Motion.div
-                                              animate={{ y: [0, -5, 0] }}
-                                              transition={{ duration: 0.85, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                                            >
-                                              <Upload style={{ width: 14, height: 14, color: "#0A859B" }} />
-                                            </Motion.div>
-                                            <p className="one-on-one-audio-caption">Uploading...</p>
-                                          </div>
-                                        ) : (
-                                          <p className="one-on-one-audio-caption">
-                                            {audioUi.previewUrl
-                                              ? `Ready to send (${formatAudioDuration(audioUi.durationSec || 0)})`
-                                              : "Tap the mic to record"}
-                                          </p>
-                                        )}
+                                    {audioUi.previewUrl ? (
+                                      <div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
+                                          <Check size={12} color="#0A859B" />
+                                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0A859B" }}>
+                                            {audioUi.status === "success" ? "Sent" : "Audio recorded"}
+                                          </span>
+                                        </div>
+                                        <AudioPlayer src={audioUi.previewUrl} />
+                                        <button
+                                          type="button"
+                                          onClick={() => uploadRecording(item.id)}
+                                          disabled={!canSubmitAudio || isUploading || audioUi.status === "success"}
+                                          style={{
+                                            width: "100%",
+                                            marginTop: 10,
+                                            borderRadius: 12,
+                                            border: "none",
+                                            background: audioUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
+                                            color: audioUi.status === "success" ? "#6E7892" : "#2D3852",
+                                            padding: "10px 0",
+                                            fontFamily: "Fustat, sans-serif",
+                                            fontWeight: 700,
+                                            fontSize: 13,
+                                            cursor: !canSubmitAudio || isUploading || audioUi.status === "success" ? "default" : "pointer",
+                                            opacity: isUploading ? 0.65 : 1,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: 6,
+                                            transition: "opacity 0.15s",
+                                          }}
+                                        >
+                                          {audioUi.status === "success" ? (
+                                            <>
+                                              <Check size={14} /> Sent
+                                            </>
+                                          ) : isUploading ? (
+                                            "Sending…"
+                                          ) : (
+                                            <>
+                                              <Upload size={14} /> Send
+                                            </>
+                                          )}
+                                        </button>
                                       </div>
+                                    ) : (
+                                      <div className="one-on-one-audio-composer">
+                                        <button
+                                          type="button"
+                                          onClick={() => (isRecording ? stopRecording(item.id) : startRecording(item.id))}
+                                          disabled={!canSubmitAudio}
+                                          className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
+                                        >
+                                          {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                                        </button>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => uploadRecording(item.id)}
-                                        disabled={!canSubmitAudio || !hasPendingAudio || isUploading}
-                                        className="one-on-one-audio-send-btn"
-                                      >
-                                        <Upload className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
+                                        <div className="one-on-one-audio-track">
+                                          {isRecording ? (
+                                            <div className="one-on-one-audio-wave">
+                                              {Array.from({ length: 18 }).map((_, waveIndex) => (
+                                                <Motion.span
+                                                  key={waveIndex}
+                                                  className="one-on-one-audio-wave-bar"
+                                                  animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
+                                                  transition={{
+                                                    duration: 1.1,
+                                                    repeat: Number.POSITIVE_INFINITY,
+                                                    delay: waveIndex * 0.04,
+                                                  }}
+                                                />
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="one-on-one-audio-caption">Tap the mic to record</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
 
                                     {audioData?.active_audio?.url ? (
                                       <div className="one-on-one-audio-player-wrap">
@@ -595,15 +620,11 @@ export default function OneOnOnes() {
                                           <span>Latest audio</span>
                                           {activeDuration > 0 ? <span>{formatAudioDuration(activeDuration)}</span> : null}
                                         </div>
-                                        <audio controls src={audioData.active_audio.url} className="w-full" />
+                                        <AudioPlayer src={audioData.active_audio.url} />
                                       </div>
                                     ) : (
                                       <p style={{ fontSize: 11, color: "#9AA3B8", margin: 0 }}>No audio uploaded yet.</p>
                                     )}
-
-                                    {audioUi.previewUrl && audioUi.status !== "success" ? (
-                                      <audio controls src={audioUi.previewUrl} className="w-full" />
-                                    ) : null}
 
                                     {audioUi.error ? (
                                       <p style={{ fontSize: 11, color: "#D9534F", margin: 0 }}>{audioUi.error}</p>

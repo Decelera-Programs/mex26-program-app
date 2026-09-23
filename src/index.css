@@ -302,7 +302,7 @@
 
   .one-on-one-audio-composer {
     display: grid;
-    grid-template-columns: 2.2rem minmax(0, 1fr) 2.2rem;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
     align-items: center;
     gap: 0.55rem;
   }
