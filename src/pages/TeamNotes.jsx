@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
-import { Building2, ChevronDown, ChevronUp, Mic, Square, Upload, User, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, Square, Upload, User, X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -13,6 +13,7 @@ import {
 } from "../api/dataService";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 
 export default function TeamNotes() {
@@ -87,8 +88,8 @@ export default function TeamNotes() {
     return (
       <div className="w-full pt-[30px] pb-6" style={{ background: "#F2F8FA" }}>
         <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
-          <div className="rounded-[20px] border px-[18px] py-10 text-center" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#2D3852" }}>Only team members can access this section.</p>
+          <div className="rounded-[20px] border" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
+            <EmptyState icon={Lock} title="Team members only" hint="Only Decelera team members can access this section." />
           </div>
         </div>
       </div>
@@ -220,7 +221,7 @@ export default function TeamNotes() {
             width: "100%",
             borderRadius: 16,
             border: "1.5px solid",
-            borderColor: composerOpen ? "#E2E9EE" : "#1FD0EF",
+            borderColor: composerOpen ? "#E4EAF0" : "#1FD0EF",
             background: composerOpen ? "#FFFFFF" : "#1FD0EF",
             color: composerOpen ? "#6E7892" : "#2D3852",
             padding: "11px 16px",
@@ -267,8 +268,8 @@ export default function TeamNotes() {
                           flex: 1,
                           borderRadius: 10,
                           border: "1.5px solid",
-                          borderColor: targetType === key ? "#1FD0EF" : "#E2E9EE",
-                          background: targetType === key ? "#E8FBFE" : "transparent",
+                          borderColor: targetType === key ? "#1FD0EF" : "#E4EAF0",
+                          background: targetType === key ? "#E6F8FC" : "transparent",
                           color: targetType === key ? "#0A859B" : "#6E7892",
                           padding: "8px 0",
                           fontFamily: "Fustat, sans-serif",
@@ -290,9 +291,9 @@ export default function TeamNotes() {
 
                   {/* Selected target row */}
                   {selectedTarget ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "8px 10px", borderRadius: 12, background: "#F2F8FA", border: "1px solid #E2E9EE" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "8px 10px", borderRadius: 12, background: "#F2F8FA", border: "1px solid #E4EAF0" }}>
                       {targetPhoto && !failedPhotos[selectedTarget.id] ? (
-                        <div style={{ width: 32, height: 32, borderRadius: 8, overflow: "hidden", border: "1px solid #E2E9EE", flexShrink: 0 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 10, overflow: "hidden", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                           <img
                             src={targetPhoto}
                             alt={targetName}
@@ -302,7 +303,7 @@ export default function TeamNotes() {
                           />
                         </div>
                       ) : (
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: "#1FD0EF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 10, background: "#EDF1F4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#2D3852" }}>{(targetName || "?")[0]?.toUpperCase()}</span>
                         </div>
                       )}
@@ -325,14 +326,14 @@ export default function TeamNotes() {
                         style={{
                           width: "100%",
                           borderRadius: 10,
-                          border: "1.5px solid #E2E9EE",
+                          border: "1.5px solid #E4EAF0",
                           padding: "8px 12px",
                           fontSize: 13,
                           color: "#2D3852",
                           fontFamily: "Fustat, sans-serif",
                           marginBottom: 6,
                           outline: "none",
-                          background: "#F9FBFC",
+                          background: "#FFFFFF",
                           boxSizing: "border-box",
                         }}
                       />
@@ -348,6 +349,7 @@ export default function TeamNotes() {
                               key={item.id}
                               type="button"
                               onClick={() => { setSelectedTarget(item); setSearch(""); setAudioUi({}); }}
+                              className="hover:bg-[#F2F8FA]"
                               style={{
                                 width: "100%",
                                 display: "flex",
@@ -361,15 +363,13 @@ export default function TeamNotes() {
                                 textAlign: "left",
                                 transition: "background 0.12s",
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "#F2F8FA"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                             >
                               {photo && !failedPhotos[item.id] ? (
-                                <div style={{ width: 32, height: 32, borderRadius: 8, overflow: "hidden", border: "1px solid #E2E9EE", flexShrink: 0 }}>
+                                <div style={{ width: 32, height: 32, borderRadius: 10, overflow: "hidden", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                                   <img src={photo} alt={name} referrerPolicy="no-referrer" className="w-full h-full object-cover" onError={() => setFailedPhotos((prev) => ({ ...prev, [item.id]: true }))} />
                                 </div>
                               ) : (
-                                <div style={{ width: 32, height: 32, borderRadius: 8, background: "#1FD0EF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <div style={{ width: 32, height: 32, borderRadius: 10, background: "#EDF1F4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "#2D3852" }}>{(name || "?")[0]?.toUpperCase()}</span>
                                 </div>
                               )}
@@ -386,7 +386,7 @@ export default function TeamNotes() {
 
                   {/* Recorder — shown only after picking a target */}
                   {selectedTarget && (
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E2E9EE" }}>
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #E4EAF0" }}>
                       <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", marginBottom: 8 }}>
                         Record your note
                       </p>
@@ -445,15 +445,13 @@ export default function TeamNotes() {
 
         {/* Notes list */}
         {notesError && (
-          <div className="rounded-[20px] border px-[18px] py-4 text-center" style={{ background: "#FFF4F4", borderColor: "#FFD5D5" }}>
-            <p style={{ fontSize: 12, color: "#C0392B" }}>Could not load notes: {notesError}</p>
+          <div className="rounded-[20px] border px-[18px] py-4 text-center" style={{ background: "#FFFFFF", borderColor: "#FFD0D0" }}>
+            <p style={{ fontSize: 12, color: "#D9534F" }}>Could not load notes: {notesError}</p>
           </div>
         )}
         {!notesError && notes.length === 0 && !composerOpen ? (
-          <div className="rounded-[20px] border px-[18px] py-10 text-center" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
-            <Mic className="h-8 w-8 mx-auto mb-3" style={{ color: "#B9C1D4" }} />
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#2D3852" }}>No notes yet</p>
-            <p style={{ fontSize: 12, color: "#6E7892", marginTop: 4 }}>Tap "New Note" to record your first voice note</p>
+          <div className="rounded-[20px] border" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
+            <EmptyState icon={Mic} title="No notes yet" hint={'Tap "New Note" to record your first voice note.'} />
           </div>
         ) : (
           <div className="flex flex-col gap-[14px]">
@@ -488,7 +486,7 @@ export default function TeamNotes() {
                       style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}
                     >
                       {photo && !failedPhotos[note.id] ? (
-                        <div style={{ width: 36, height: 36, borderRadius: 10, overflow: "hidden", border: "1px solid #E2E9EE", flexShrink: 0 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, overflow: "hidden", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                           <img
                             src={photo}
                             alt={name}
@@ -498,7 +496,7 @@ export default function TeamNotes() {
                           />
                         </div>
                       ) : (
-                        <div style={{ width: 36, height: 36, borderRadius: 10, background: "#1FD0EF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: "#EDF1F4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 6px rgba(45,56,82,0.10), inset 0 0 0 1px rgba(45,56,82,0.05)" }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#2D3852" }}>{(name || "?")[0]?.toUpperCase()}</span>
                         </div>
                       )}
@@ -508,6 +506,7 @@ export default function TeamNotes() {
                           {note.target_type === "startup" ? "Startup" : "Founder"} · {moment(note.createdat).format("MMM D, HH:mm")}
                         </p>
                       </div>
+                      {targetPath && <ChevronRight size={15} color="#B9C1D4" style={{ flexShrink: 0 }} />}
                       <span style={{
                         fontSize: 10,
                         fontWeight: 700,
@@ -516,8 +515,8 @@ export default function TeamNotes() {
                         padding: "3px 7px",
                         borderRadius: 6,
                         flexShrink: 0,
-                        background: isTranscribed ? "#E5F8EE" : note.status === "failed" ? "#FEE2E2" : "#F2F8FA",
-                        color: isTranscribed ? "#17875A" : note.status === "failed" ? "#DC2626" : "#6E7892",
+                        background: isTranscribed ? "#2D3852" : note.status === "failed" ? "#FFF0F0" : "#FFF4E5",
+                        color: isTranscribed ? "#FFFFFF" : note.status === "failed" ? "#D9534F" : "#FF9950",
                       }}>
                         {isTranscribed ? "Transcribed" : note.status === "failed" ? "Failed" : "Processing"}
                       </span>
@@ -568,13 +567,13 @@ export default function TeamNotes() {
                             >
                               <p style={{
                                 fontSize: 12,
-                                color: "#4A5568",
+                                color: "#4A5573",
                                 lineHeight: 1.65,
                                 marginTop: 6,
                                 padding: "8px 10px",
                                 borderRadius: 8,
-                                background: "#F9FBFC",
-                                border: "1px solid #E2E9EE",
+                                background: "#F2F8FA",
+                                border: "1px solid #E4EAF0",
                               }}>
                                 {note.transcript_text}
                               </p>
