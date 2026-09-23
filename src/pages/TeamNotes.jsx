@@ -386,17 +386,49 @@ export default function TeamNotes() {
                         Record your note
                       </p>
                       {audioUi.previewUrl ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <AudioPlayer src={audioUi.previewUrl} />
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
+                            <Check size={12} color="#0A859B" />
+                            <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0A859B" }}>
+                              {audioUi.status === "success" ? "Sent" : "Audio recorded"}
+                            </span>
                           </div>
+                          <AudioPlayer src={audioUi.previewUrl} />
                           <button
                             type="button"
                             onClick={uploadNote}
                             disabled={isUploading || audioUi.status === "success"}
-                            className="one-on-one-audio-send-btn"
+                            style={{
+                              width: "100%",
+                              marginTop: 10,
+                              borderRadius: 12,
+                              border: "none",
+                              background: audioUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
+                              color: audioUi.status === "success" ? "#6E7892" : "#2D3852",
+                              padding: "10px 0",
+                              fontFamily: "Fustat, sans-serif",
+                              fontWeight: 700,
+                              fontSize: 13,
+                              cursor: isUploading || audioUi.status === "success" ? "default" : "pointer",
+                              opacity: isUploading ? 0.65 : 1,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 6,
+                              transition: "opacity 0.15s",
+                            }}
                           >
-                            {audioUi.status === "success" ? <Check className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}
+                            {audioUi.status === "success" ? (
+                              <>
+                                <Check size={14} /> Sent
+                              </>
+                            ) : isUploading ? (
+                              "Sending…"
+                            ) : (
+                              <>
+                                <Upload size={14} /> Send
+                              </>
+                            )}
                           </button>
                         </div>
                       ) : (
