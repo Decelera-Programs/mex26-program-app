@@ -30,7 +30,7 @@ const CATEGORY_THEME = {
   challenges:   { bg: "#EEF1F9", bar: "#2D3852", title: "#1A2235", time: "#3A4B6A", label: "Challenges & Investment" },
   mind_body:    { bg: "#E5F6FA", bar: "#0A859B", title: "#004D5E", time: "#0A6C80", label: "Mind, Body & Reflection" },
   networking:   { bg: "#FFF5E2", bar: "#FFB950", title: "#6B4700", time: "#8B6208", label: "Networking & Community" },
-  default:      { bg: "hsl(var(--secondary))", bar: "#888780", title: "hsl(var(--foreground))", time: "#7A7A74", label: "Otros" },
+  default:      { bg: "#EEF2F5", bar: "#9AA3B8", title: "#4A5573", time: "#6E7892", label: "Otros" },
 };
 
 function getCategoryFromType(type) {
@@ -550,14 +550,12 @@ export default function Schedule() {
                 type="button"
                 onClick={() => setAttendeeFilter(tab.key)}
                 className={`flex-shrink-0 rounded-full font-semibold transition-all ${
-                  attendeeFilter === tab.key
-                    ? "text-white"
-                    : "app-card text-muted-foreground"
+                  attendeeFilter === tab.key ? "text-white" : "app-card"
                 }`}
                 style={
                   attendeeFilter === tab.key
                     ? { background: "#2D3852", color: "#FFFFFF", marginRight: 6, padding: "6px 13px", fontSize: 11.5 }
-                    : { marginRight: 6, padding: "6px 13px", fontSize: 11.5 }
+                    : { color: "#6E7892", marginRight: 6, padding: "6px 13px", fontSize: 11.5 }
                 }
               >
                 {tab.label}
@@ -577,7 +575,7 @@ export default function Schedule() {
           <div
             className="border-b grid grid-cols-2"
             style={{
-              borderColor: "hsl(var(--border) / 0.7)",
+              borderColor: "#E4EAF0",
               paddingLeft: 36,
               paddingRight: 16,
               paddingTop: 14,
@@ -596,7 +594,7 @@ export default function Schedule() {
               <div key={item.label} className="inline-flex items-center min-w-0" style={{ gap: 8 }}>
                 <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "9999px", backgroundColor: item.color }} />
                 <span
-                  style={{ color: "hsl(var(--muted-foreground))", fontSize: 12.5, lineHeight: 1.3, fontFamily: "Fustat, sans-serif" }}
+                  style={{ color: "#6E7892", fontSize: 12.5, lineHeight: 1.3, fontFamily: "Fustat, sans-serif" }}
                 >
                   {item.label}
                 </span>
@@ -613,11 +611,11 @@ export default function Schedule() {
                   <div
                     key={hour}
                     className="absolute left-0 right-0 border-b"
-                    style={{ top: metric.top, height: metric.rowHeight, borderColor: "hsl(var(--border) / 0.45)" }}
+                    style={{ top: metric.top, height: metric.rowHeight, borderColor: "#EEF2F5" }}
                   >
                     <div
                       className="absolute top-[10px] w-[52px] pr-2 text-right text-[11px] font-medium"
-                      style={{ left: -14, color: "hsl(var(--muted-foreground))" }}
+                      style={{ left: -14, color: "#9AA3B8" }}
                     >
                       {`${hour}:00`}
                     </div>
