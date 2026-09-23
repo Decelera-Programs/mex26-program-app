@@ -286,47 +286,11 @@
     padding: 1.25rem 1.1rem;
   }
 
-  .one-on-one-card {
-    padding: 0.85rem 1rem;
-  }
-
-  .one-on-one-card-layout {
-    display: grid;
-    grid-template-columns: 2.9rem minmax(0, 1fr);
-    align-items: start;
-    column-gap: 0.85rem;
-  }
-
-  .one-on-one-card-media {
-    padding-top: 0.15rem;
-  }
-
-  .one-on-one-card-content {
-    min-width: 0;
-    padding-right: 0.25rem;
-    padding-top: 0;
-  }
-
-  .one-on-one-audio-panel {
-    padding: 0.7rem 0.8rem;
-    border-radius: 0.95rem;
-    border: 1px solid hsl(var(--border) / 0.62);
-  }
-
   .one-on-one-audio-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-  }
-
-  .one-on-one-audio-toggle-btn {
-    border: 0;
-    background: transparent;
-    color: hsl(var(--primary));
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
   }
 
   .one-on-one-audio-body {
@@ -356,19 +320,19 @@
   }
 
   .one-on-one-audio-mic-btn {
-    background-color: hsl(var(--foreground));
-    color: white;
+    background-color: #2D3852;
+    color: #FFFFFF;
   }
 
   .one-on-one-audio-mic-btn.is-recording {
-    background-color: rgba(255, 185, 80, 0.92);
-    color: hsl(var(--foreground));
-    box-shadow: 0 0 0 6px rgba(255, 185, 80, 0.18);
+    background-color: #FFB950;
+    color: #2D3852;
+    box-shadow: 0 0 0 6px rgba(255, 185, 80, 0.22);
   }
 
   .one-on-one-audio-send-btn {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background-color: #1FD0EF;
+    color: #2D3852;
   }
 
   .one-on-one-audio-mic-btn:disabled,
@@ -380,8 +344,8 @@
   .one-on-one-audio-track {
     min-height: 2.2rem;
     border-radius: 9999px;
-    border: 1px solid hsl(var(--border) / 0.8);
-    background: hsl(var(--muted) / 0.5);
+    border: 1px solid #E4EAF0;
+    background: #FFFFFF;
     padding: 0 0.7rem;
     display: flex;
     align-items: center;
@@ -401,21 +365,21 @@
     height: 100%;
     transform-origin: center;
     border-radius: 9999px;
-    background-color: hsl(var(--primary));
+    background-color: #1FD0EF;
   }
 
   .one-on-one-audio-caption {
     font-size: 0.68rem;
-    color: hsl(var(--muted-foreground));
+    color: #6E7892;
     font-weight: 600;
     letter-spacing: 0.01em;
   }
 
   .one-on-one-audio-player-wrap {
-    border: 1px solid hsl(var(--border) / 0.6);
+    border: 1px solid #EEF2F5;
     border-radius: 0.75rem;
     padding: 0.5rem;
-    background: hsl(var(--card));
+    background: #FFFFFF;
   }
 
   .one-on-one-audio-player-meta {
@@ -427,22 +391,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .one-on-one-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-width: 0;
-    margin-top: 2px;
-  }
-
-  .one-on-one-meta-icon {
-    width: 0.9rem;
-    height: 0.9rem;
-    flex: 0 0 0.9rem;
-    color: hsl(var(--primary));
+    color: #6E7892;
   }
 
   .event-meta-icon {

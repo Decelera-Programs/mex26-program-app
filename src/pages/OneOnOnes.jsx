@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Clock, MapPin, Mic, Square, Upload, Users } from "lucide-react";
+import { ChevronRight, Clock, MapPin, Mic, Square, Upload, Users } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -18,6 +18,7 @@ import {
 } from "../lib/dateTime";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import { SPRING, stagger } from "../lib/motion";
 
@@ -347,12 +348,8 @@ export default function OneOnOnes() {
         </div>
 
         {groupedItems.length === 0 ? (
-          <div
-            className="rounded-[20px] border px-[18px] py-10 text-center"
-            style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}
-          >
-            <Users className="h-8 w-8 mx-auto mb-3" style={{ color: "#B9C1D4" }} />
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#2D3852" }}>No 1:1 meetings scheduled</p>
+          <div className="rounded-[20px] border" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
+            <EmptyState icon={Users} title="No 1:1 meetings scheduled" hint="Your person-to-person meetings will show up here." />
           </div>
         ) : (
           <div className="flex flex-col gap-6">
@@ -405,50 +402,93 @@ export default function OneOnOnes() {
                             }
                           }}
                           className="cursor-pointer transition-all duration-200 hover:brightness-[0.98]"
-                          style={{ padding: "10px 14px" }}
+                          style={{ padding: "14px 16px" }}
                         >
-                          <div style={{ display: "grid", gridTemplateColumns: "2.75rem minmax(0,1fr)", columnGap: "0.75rem", alignItems: "start" }}>
-                            <div style={{ paddingTop: 2 }}>
-                              {targetPhotoUrl && !failedPersonPhotos[item.id] ? (
-                                <div
-                                  className="overflow-hidden bg-white"
-                                  style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: 12, border: "1px solid #E2E7ED" }}
-                                >
-                                  <img
-                                    src={targetPhotoUrl}
-                                    alt={targetLabel || "Person"}
-                                    referrerPolicy="no-referrer"
-                                    onError={() => setFailedPersonPhotos((prev) => ({ ...prev, [item.id]: true }))}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                              ) : (
-                                <div
-                                  className="flex items-center justify-center font-bold text-sm"
-                                  style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: 12, background: "#1FD0EF", color: "#2D3852" }}
-                                >
-                                  {personInitials}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 0 }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", lineHeight: 1.1, marginBottom: 2 }} className="truncate">{targetLabel}</p>
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
-                                <Clock style={{ width: "1rem", height: "1rem", flex: "0 0 1rem", color: "#1FD0EF" }} />
-                                <p style={{ fontSize: 13, color: "#6E7892", lineHeight: 1 }}>
-                                  {formatTime24(item.start_time)} – {formatTime24(item.end_time)}
-                                </p>
+                          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+                            {targetPhotoUrl && !failedPersonPhotos[item.id] ? (
+                              <div
+                                className="overflow-hidden flex-shrink-0"
+                                style={{
+                                  width: 46,
+                                  height: 46,
+                                  borderRadius: 14,
+                                  background: "#EDF1F4",
+                                  boxShadow: "0 3px 8px rgba(45,56,82,0.12), inset 0 0 0 1px rgba(45,56,82,0.05)",
+                                }}
+                              >
+                                <img
+                                  src={targetPhotoUrl}
+                                  alt={targetLabel || "Person"}
+                                  referrerPolicy="no-referrer"
+                                  onError={() => setFailedPersonPhotos((prev) => ({ ...prev, [item.id]: true }))}
+                                  className="w-full h-full object-cover"
+                                />
                               </div>
-                              {item.location && (
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0, marginTop: -12 }}>
-                                  <MapPin style={{ width: "1rem", height: "1rem", flex: "0 0 1rem", color: "#1FD0EF" }} />
-                                  <p style={{ fontSize: 13, color: "#6E7892", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.location}</p>
+                            ) : (
+                              <div
+                                className="flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  width: 46,
+                                  height: 46,
+                                  borderRadius: 14,
+                                  background: "#EDF1F4",
+                                  boxShadow: "0 3px 8px rgba(45,56,82,0.12), inset 0 0 0 1px rgba(45,56,82,0.05)",
+                                  color: "#2D3852",
+                                  fontWeight: 700,
+                                  fontSize: 14,
+                                }}
+                              >
+                                {personInitials}
+                              </div>
+                            )}
+
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontFamily: "Taviraj, Georgia, serif",
+                                  fontSize: 15.5,
+                                  fontWeight: 500,
+                                  lineHeight: 1.2,
+                                  letterSpacing: "-0.01em",
+                                  color: "#2D3852",
+                                }}
+                                className="truncate"
+                              >
+                                {targetLabel}
+                              </p>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <Clock size={13} color="#0A859B" style={{ flexShrink: 0 }} />
+                                  <span style={{ fontSize: 12, color: "#6E7892" }}>
+                                    {formatTime24(item.start_time)} – {formatTime24(item.end_time)}
+                                  </span>
                                 </div>
-                              )}
+                                {item.location && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                                    <MapPin size={13} color="#0A859B" style={{ flexShrink: 0 }} />
+                                    <span
+                                      style={{
+                                        fontSize: 12,
+                                        color: "#6E7892",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {item.location}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                               {item.notes && (
-                                <p style={{ fontSize: 11, color: "#6E7892" }} className="line-clamp-2">{item.notes}</p>
+                                <p style={{ fontSize: 11, color: "#9AA3B8", marginTop: 5 }} className="line-clamp-2">
+                                  {item.notes}
+                                </p>
                               )}
                             </div>
+
+                            {targetPath ? <ChevronRight size={16} color="#B9C1D4" style={{ flexShrink: 0 }} /> : null}
                           </div>
                         </div>
 
@@ -558,7 +598,7 @@ export default function OneOnOnes() {
                                         <audio controls src={audioData.active_audio.url} className="w-full" />
                                       </div>
                                     ) : (
-                                      <p className="text-[11px] text-muted-foreground">No audio uploaded yet.</p>
+                                      <p style={{ fontSize: 11, color: "#9AA3B8", margin: 0 }}>No audio uploaded yet.</p>
                                     )}
 
                                     {audioUi.previewUrl && audioUi.status !== "success" ? (
@@ -566,17 +606,26 @@ export default function OneOnOnes() {
                                     ) : null}
 
                                     {audioUi.error ? (
-                                      <p className="text-[11px] text-rose-600">{audioUi.error}</p>
+                                      <p style={{ fontSize: 11, color: "#D9534F", margin: 0 }}>{audioUi.error}</p>
                                     ) : null}
 
                                     {audioData?.submissions?.length ? (
                                       <div>
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                                        <p
+                                          style={{
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.06em",
+                                            color: "#9AA3B8",
+                                            margin: "0 0 4px",
+                                          }}
+                                        >
                                           Attempts
                                         </p>
-                                        <div className="space-y-1">
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                           {audioData.submissions.slice(0, 3).map((submission) => (
-                                            <p key={submission.id} className="text-[11px] text-muted-foreground">
+                                            <p key={submission.id} style={{ fontSize: 11, color: "#9AA3B8", margin: 0 }}>
                                               {formatShortDateTime(submission.createdat || submission.createdAt)} ·{" "}
                                               {submission.status}
                                             </p>
