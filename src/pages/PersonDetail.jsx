@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Globe, Calendar, GraduationCap, Building2, ChevronRight, ChevronDown, Target } from "lucide-react";
+import { Globe, Calendar, GraduationCap, Building2, ChevronRight, ChevronDown, Target, Users } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { getCurrentUser, getPersonById, getStartupById } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import EmptyState from "../components/EmptyState";
 
 const typeLabels = {
   experience_maker: "Experience Maker",
@@ -84,12 +85,18 @@ export default function PersonDetail() {
 
   if (!person) {
     return (
-      <div className="flex flex-col items-center justify-center h-dvh px-5">
-        <p className="text-4xl mb-4">👤</p>
-        <p className="text-muted-foreground">Person not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-primary text-sm font-medium">
-          Go Back
-        </button>
+      <div className="w-full flex items-center justify-center" style={{ minHeight: "100dvh", background: "#F2F8FA" }}>
+        <div style={{ width: "calc(100% - 20px)", maxWidth: 370, textAlign: "center" }}>
+          <EmptyState icon={Users} title="Person not found" hint="This profile may have been removed or the link is outdated." />
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="press-scale"
+            style={{ border: "none", background: "none", color: "#0A859B", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
+          >
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
@@ -107,8 +114,6 @@ export default function PersonDetail() {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-  const detailCardClass =
-    "rounded-[20px] border bg-card px-6 py-6 shadow-[0_10px_28px_rgba(15,23,42,0.08)]";
   const expertiseDotColors = ["#1FD0EF", "#B9C1D4", "#4EA72E", "#FFB950"];
 
   return (
@@ -378,21 +383,14 @@ export default function PersonDetail() {
                       {startup.name[0]}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1" style={{ transform: "translateY(-4px)" }}>
+                  <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold truncate" style={{ color: "#2D3852", lineHeight: 1.1 }}>{startup.name}</p>
-                    <div className="flex items-center gap-[8px]" style={{ marginTop: -2 }}>
+                    <div className="flex items-center gap-[8px]" style={{ marginTop: 4 }}>
                       <span
                         aria-hidden="true"
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: "9999px",
-                          backgroundColor: "#1FD0EF",
-                          flex: "0 0 auto",
-                          transform: "translateY(-2px)",
-                        }}
+                        style={{ width: 7, height: 7, borderRadius: "9999px", backgroundColor: "#1FD0EF", flex: "0 0 auto" }}
                       />
-                      <span className="text-[11px] truncate" style={{ color: "#6E7892", transform: "translateY(-1px)", display: "inline-block", lineHeight: 1.1 }}>
+                      <span className="text-[11px] truncate" style={{ color: "#6E7892", lineHeight: 1.1 }}>
                         {startup.sector || "Industry not specified"}
                       </span>
                     </div>
@@ -435,19 +433,6 @@ export default function PersonDetail() {
             </div>
           )}
 
-          {person.availability_note && (
-            <>
-              <div className={`${detailCardClass} grid grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-3`} style={{ borderColor: "#EEF2F5", background: "#FFFFFF" }}>
-                <div className="pt-0.5 flex items-center justify-center">
-                  <Calendar className="h-4 w-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">1:1 Availability</p>
-                  <p className="text-sm text-foreground">{person.availability_note}</p>
-                </div>
-              </div>
-            </>
-          )}
           </div>
         </Motion.div>
         <div className="h-8" />

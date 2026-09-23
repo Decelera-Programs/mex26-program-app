@@ -433,7 +433,7 @@ export default function TeamNotes() {
                         <audio controls src={audioUi.previewUrl} className="w-full mt-2" />
                       )}
                       {audioUi.error && (
-                        <p className="text-[11px] text-rose-600 mt-1">{audioUi.error}</p>
+                        <p className="text-[11px] mt-1" style={{ color: "#D9534F" }}>{audioUi.error}</p>
                       )}
                     </div>
                   )}

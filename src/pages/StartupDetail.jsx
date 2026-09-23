@@ -6,6 +6,7 @@ import { getCurrentUser, getStartupById, listPeople } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
+import EmptyState from "../components/EmptyState";
 
 const contactTypeColors = {
   experience_maker: "#1FD0EF",
@@ -101,12 +102,18 @@ export default function StartupDetail() {
 
   if (!startup) {
     return (
-      <div className="flex flex-col items-center justify-center h-dvh px-5">
-        <p className="text-4xl mb-4">🚀</p>
-        <p className="text-muted-foreground">Startup not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-primary text-sm font-medium">
-          Go Back
-        </button>
+      <div className="w-full flex items-center justify-center" style={{ minHeight: "100dvh", background: "#F2F8FA" }}>
+        <div style={{ width: "calc(100% - 20px)", maxWidth: 370, textAlign: "center" }}>
+          <EmptyState icon={Building2} title="Startup not found" hint="This profile may have been removed or the link is outdated." />
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="press-scale"
+            style={{ border: "none", background: "none", color: "#0A859B", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
+          >
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
@@ -290,11 +297,11 @@ export default function StartupDetail() {
                             {(founder.full_name || "?").charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <div className="min-w-0 flex-1" style={{ transform: "translateY(-3px)" }}>
+                        <div className="min-w-0 flex-1">
                           <p className="text-[13px] font-semibold truncate" style={{ color: "#2D3852", lineHeight: 1.1 }}>
                             {founder.full_name}
                           </p>
-                          <div className="flex items-center gap-[8px]" style={{ marginTop: -2 }}>
+                          <div className="flex items-center gap-[8px]" style={{ marginTop: 4 }}>
                             <span
                               aria-hidden="true"
                               style={{
@@ -304,10 +311,9 @@ export default function StartupDetail() {
                                 backgroundColor:
                                   contactTypeColors[String(founder.contact_type || founder.person_type || "").trim().toLowerCase()] || "#B9C1D4",
                                 flex: "0 0 auto",
-                                transform: "translateY(-2px)",
                               }}
                             />
-                            <span className="text-[11px] truncate" style={{ color: "#6E7892", transform: "translateY(-1px)", display: "inline-block", lineHeight: 1.1 }}>
+                            <span className="text-[11px] truncate" style={{ color: "#6E7892", lineHeight: 1.1 }}>
                               {contactTypeLabels[String(founder.contact_type || founder.person_type || "").trim().toLowerCase()] ||
                                 founder.contact_type ||
                                 founder.person_type ||
