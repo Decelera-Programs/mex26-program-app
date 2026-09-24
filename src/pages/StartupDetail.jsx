@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Globe, Building2, Users, FileText } from "lucide-react";
 import { motion as Motion } from "framer-motion";
-import { getCurrentUser, getStartupById, listPeople } from "../api/dataService";
+import { getCurrentUser, listPeople, listStartups } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 import EmptyState from "../components/EmptyState";
+import SwipePager from "../components/SwipePager";
+import { browseOrder, neighboursOf } from "../lib/browseList";
 
 const contactTypeColors = {
   experience_maker: "#1FD0EF",
@@ -33,9 +35,20 @@ function toExternalWebsiteUrl(rawUrl) {
   return `https://${withoutLeadingSlashes}`;
 }
 
+function toPeek(s) {
+  return s
+    ? { id: s.id, label: s.name, image: s.logo_url, imageFit: "contain", initials: (s.name || "?")[0].toUpperCase() }
+    : null;
+}
+
+const alphabetical = (all) => [...all].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
 export default function StartupDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const swipeFrom = location.state?.swipe || null;
+  const [neighbours, setNeighbours] = useState({ prev: null, next: null });
   const [user, setUser] = useState(null);
   const [startup, setStartup] = useState(null);
   const [founders, setFounders] = useState([]);
@@ -62,9 +75,14 @@ export default function StartupDetail() {
         return;
       }
 
-      const [s, people] = await Promise.all([getStartupById(id), listPeople()]);
+      const [startups, people] = await Promise.all([listStartups(), listPeople()]);
       if (cancelled) return;
-      setStartup(s || null);
+      const s = startups.find((item) => item.id === id) || null;
+      setStartup(s);
+      if (s) {
+        const { prev, next } = neighboursOf(browseOrder("startups", startups, id, alphabetical), id);
+        setNeighbours({ prev: toPeek(prev), next: toPeek(next) });
+      }
 
       if (!s) {
         setFounders([]);
@@ -97,7 +115,11 @@ export default function StartupDetail() {
   if (!loading && !user) return <UserNotRegisteredError />;
 
   if (loading) {
-    return <LoadingState message="Preparing your day" />;
+    // Arriving by swipe the data is cached and lands in a frame — a loader
+    // flash there would break the transition.
+    return swipeFrom
+      ? <div style={{ minHeight: "100dvh", background: "#F2F8FA" }} />
+      : <LoadingState message="Preparing your day" />;
   }
 
   if (!startup) {
@@ -122,6 +144,13 @@ export default function StartupDetail() {
 
   return (
     <div className="w-full pt-[30px] pb-6 sm:pt-[40px]" style={{ background: "#F2F8FA", minHeight: "100vh" }}>
+      <SwipePager
+        prev={neighbours.prev}
+        next={neighbours.next}
+        enterFrom={swipeFrom}
+        disabled={logoOpen}
+        onNavigate={(item, direction) => navigate(`/startup/${item.id}`, { replace: true, state: { swipe: direction } })}
+      >
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
         <div
           className="relative overflow-hidden"
@@ -135,7 +164,7 @@ export default function StartupDetail() {
           }}
         >
           <div
-            className="decelera-mx-mark pointer-events-none absolute"
+            className="decelera-mx-mark decelera-mx-mark--soft pointer-events-none absolute"
             style={{ right: -40, bottom: -64, height: 220, width: 220, color: "#2D3852" }}
           >
             <DeceleraRosetteMark />
@@ -361,6 +390,7 @@ export default function StartupDetail() {
         </Motion.div>
         <div className="h-8" />
       </div>
+      </SwipePager>
 
       {logoOpen && startup.logo_url && !startupLogoFailed && (
         <Motion.div

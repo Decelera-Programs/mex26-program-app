@@ -1004,6 +1004,25 @@
   animation: decelera-breathe-line 6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
+/* Hero cards that carry body text (person / startup detail): the rosette sits
+   under the description, so it breathes at roughly half the ink to keep the
+   copy readable. */
+@keyframes decelera-breathe-line-soft {
+  0%,
+  100% {
+    opacity: 0.11;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.15;
+    transform: scale(1.03);
+  }
+}
+
+.decelera-mx-mark--soft {
+  animation-name: decelera-breathe-line-soft;
+}
+
 /* "Needs your attention" treatment: a gentle float + a soft cyan glow behind a
    card. Applied by <AttentionWrap pulse> only while an action for today is still
    pending (a fresh match to open, a 1:1 to give feedback on); the wrapper is

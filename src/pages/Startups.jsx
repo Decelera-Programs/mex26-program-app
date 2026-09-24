@@ -8,6 +8,7 @@ import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 import EmptyState from "../components/EmptyState";
 import { DUR, EASE, SPRING, stagger } from "../lib/motion";
+import { saveBrowseList } from "../lib/browseList";
 
 export default function Startups() {
   const [user, setUser] = useState(null);
@@ -42,6 +43,11 @@ export default function Startups() {
         s.tagline?.toLowerCase().includes(q),
     );
   }, [startups, search]);
+
+  // Detail pages swipe through this exact (filtered) order.
+  useEffect(() => {
+    if (!loading) saveBrowseList("startups", filtered.map((item) => item.id));
+  }, [filtered, loading]);
 
   if (!loading && !user) return <UserNotRegisteredError />;
 

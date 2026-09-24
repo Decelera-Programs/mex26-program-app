@@ -1,6 +1,6 @@
-import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { Home, Calendar, Info, Users, Building2, ArrowLeft, Bell, LogOut } from "lucide-react";
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import LoadingState from "./LoadingState";
 import EventDetailsModal from "./EventDetailsModal";
@@ -25,6 +25,43 @@ export default function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const navigationType = useNavigationType();
+  const mainRef = useRef(null);
+  const scrollPositions = useRef(new Map());
+  const lastLocationKey = useRef(location.key);
+
+  // The page scrolls inside <main>, not the window, so the browser never
+  // resets it: opening a profile kept the list's scroll offset. Opening a new
+  // page (push / replace) now starts at the top; going back restores where
+  // you were on that page.
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    // Track continuously: by the time a route change commits, the new page is
+    // already in the DOM and scrollTop may have been clamped to its height.
+    const onScroll = () => scrollPositions.current.set(lastLocationKey.current, main.scrollTop);
+    main.addEventListener("scroll", onScroll, { passive: true });
+    return () => main.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    lastLocationKey.current = location.key;
+    const target = navigationType === "POP" ? scrollPositions.current.get(location.key) ?? 0 : 0;
+    main.scrollTop = target;
+    if (!target) return;
+    // Lists render after an async (cached) fetch, so the page may still be too
+    // short to scroll that far — keep trying for a few frames.
+    let frame;
+    let tries = 0;
+    const restore = () => {
+      main.scrollTop = target;
+      if (Math.abs(main.scrollTop - target) > 1 && tries++ < 40) frame = requestAnimationFrame(restore);
+    };
+    frame = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(frame);
+  }, [location.key, navigationType]);
 
   useEffect(() => { setAttendeesOpen(false); }, [location.pathname]);
 
@@ -305,6 +342,7 @@ export default function Layout() {
 
         {/* ÁREA DE CONTENIDO: con scroll independiente */}
         <main
+          ref={mainRef}
           className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-8"
           style={{
             scrollbarWidth: 'none', /* Esconde scroll en Firefox */
@@ -319,7 +357,8 @@ export default function Layout() {
           <Suspense fallback={<LoadingState />}>
             <Motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 14 }}
+              // Swiping between profiles runs its own horizontal transition.
+              initial={location.state?.swipe ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: DUR.page, ease: EASE.out }}
               className="w-full"

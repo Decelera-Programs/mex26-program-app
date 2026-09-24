@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Globe, Calendar, GraduationCap, Building2, ChevronRight, ChevronDown, Target, Users } from "lucide-react";
 import { motion as Motion } from "framer-motion";
-import { getCurrentUser, getPersonById, getStartupById } from "../api/dataService";
+import { getCurrentUser, getStartupById, listPeople } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 import EmptyState from "../components/EmptyState";
+import SwipePager from "../components/SwipePager";
+import { browseOrder, neighboursOf } from "../lib/browseList";
 
 const typeLabels = {
   experience_maker: "Experience Maker",
@@ -26,9 +28,36 @@ const typeColors = {
   alumni: "#c77b4a",
 };
 
+function initialsOf(name) {
+  return (name || "")
+    .split(/\s+/)
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function toPeek(p) {
+  return p ? { id: p.id, label: p.full_name, image: p.photo_url, initials: initialsOf(p.full_name) } : null;
+}
+
+// Without a saved browse list (deep link, coming from a startup…), swipe
+// through people with the same role, alphabetically.
+function sameRoleAlphabetical(person) {
+  const type = person?.contact_type || person?.person_type || "";
+  return (all) =>
+    all
+      .filter((p) => (p.contact_type || p.person_type || "") === type)
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+}
+
 export default function PersonDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const swipeFrom = location.state?.swipe || null;
+  const [neighbours, setNeighbours] = useState({ prev: null, next: null });
   const [user, setUser] = useState(null);
   const [person, setPerson] = useState(null);
   const [startup, setStartup] = useState(null);
@@ -57,9 +86,15 @@ export default function PersonDetail() {
         return;
       }
 
-      const found = await getPersonById(id);
+      const people = await listPeople();
       if (cancelled) return;
-      setPerson(found || null);
+      const found = people.find((p) => p.id === id) || null;
+      setPerson(found);
+      if (found) {
+        const ordered = browseOrder("people", people, id, sameRoleAlphabetical(found));
+        const { prev, next } = neighboursOf(ordered, id);
+        setNeighbours({ prev: toPeek(prev), next: toPeek(next) });
+      }
 
       if (found?.startup_id) {
         const s = await getStartupById(found.startup_id);
@@ -80,7 +115,9 @@ export default function PersonDetail() {
   if (!loading && !user) return <UserNotRegisteredError />;
 
   if (loading) {
-    return <LoadingState />;
+    // Arriving by swipe the data is cached and lands in a frame — a loader
+    // flash there would break the transition.
+    return swipeFrom ? <div style={{ minHeight: "100dvh", background: "#F2F8FA" }} /> : <LoadingState />;
   }
 
   if (!person) {
@@ -108,16 +145,18 @@ export default function PersonDetail() {
     person.about ||
     person.description ||
     "";
-  const initials = person.full_name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = initialsOf(person.full_name);
   const expertiseDotColors = ["#1FD0EF", "#B9C1D4", "#4EA72E", "#FFB950"];
 
   return (
     <div className="w-full pt-[30px] pb-6 sm:pt-[40px]" style={{ background: "#F2F8FA", minHeight: "100vh" }}>
+      <SwipePager
+        prev={neighbours.prev}
+        next={neighbours.next}
+        enterFrom={swipeFrom}
+        disabled={photoOpen}
+        onNavigate={(item, direction) => navigate(`/person/${item.id}`, { replace: true, state: { swipe: direction } })}
+      >
       <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">
         <div
           className="relative overflow-hidden"
@@ -131,7 +170,7 @@ export default function PersonDetail() {
           }}
         >
           <div
-            className="decelera-mx-mark pointer-events-none absolute"
+            className="decelera-mx-mark decelera-mx-mark--soft pointer-events-none absolute"
             style={{ right: -40, bottom: -64, height: 220, width: 220, color: "#2D3852" }}
           >
             <DeceleraRosetteMark />
@@ -437,6 +476,7 @@ export default function PersonDetail() {
         </Motion.div>
         <div className="h-8" />
       </div>
+      </SwipePager>
 
       {photoOpen && person.photo_url && !imageFailed && (
         <Motion.div

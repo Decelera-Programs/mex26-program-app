@@ -10,6 +10,7 @@ import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from '../components/LoadingState'
 import EmptyState from "../components/EmptyState";
 import { DUR, EASE } from "../lib/motion";
+import { saveBrowseList } from "../lib/browseList";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -96,6 +97,11 @@ export default function People() {
       return matchTab && matchSearch && matchToday;
     });
   }, [people, activeTab, search, todayOnly]);
+
+  // Detail pages swipe through this exact (filtered) order.
+  useEffect(() => {
+    if (!loading) saveBrowseList("people", filtered.map((item) => item.id));
+  }, [filtered, loading]);
 
   if (!loading && !user) return <UserNotRegisteredError />;
 
