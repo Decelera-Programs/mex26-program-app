@@ -19,5 +19,18 @@ export const personSafeSelect = {
   fun_fact: true,
   createdAt: true,
   updatedAt: true,
-  startup: true,
+  // Only what clients render — never the whole Startup row (its
+  // challenge_embedding alone is ~30 KB of floats per person).
+  startup: {
+    select: {
+      id: true,
+      name: true,
+      tagline: true,
+      sector: true,
+      stage: true,
+      logo_url: true,
+      website_url: true,
+      founded_year: true,
+    },
+  },
 } as const;

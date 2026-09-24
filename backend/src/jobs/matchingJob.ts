@@ -753,6 +753,20 @@ export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<s
 export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) {
   const dryRun = opts.dryRun === true;
   try {
+    // Cheap precheck before loading the pool (every person's embedding, ~MBs):
+    // this runs every 5 minutes, and once every founder has today's match
+    // there's nothing to do until tomorrow.
+    if (!dryRun) {
+      const todayMatchDate = new Date(`${todayDateKey(MATCHING_TIMEZONE)}T00:00:00.000Z`);
+      const [founderCount, matchedToday] = await Promise.all([
+        prisma.person.count({ where: { contact_type: "founder" } }),
+        prisma.match.count({ where: { match_date: todayMatchDate } }),
+      ]);
+      if (founderCount === 0 || matchedToday >= founderCount) {
+        return { ok: true as const, dry_run: false, skipped: "all_matched_today" as const, matched: 0 };
+      }
+    }
+
     const { founders, ems, todayKey, excludedFounders } = await loadMatchingPoolForToday();
     const foundersToProcess = founders.slice(0, limit);
     const base = {

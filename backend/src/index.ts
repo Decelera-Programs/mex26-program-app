@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import compression from "compression";
 import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
@@ -23,6 +24,7 @@ import { personSafeSelect } from "./lib/personSelect.js";
 
 const app = express();
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 const SUPABASE_URL = process.env.SUPABASE_URL?.trim() ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
@@ -212,112 +214,148 @@ function resolveNotificationTitle(input: { campaignTitle?: string | null; eventI
   return "Decelera México";
 }
 
+const PUSH_BATCH_SIZE = 100;
+const PUSH_MAX_BATCHES_PER_RUN = 10;
+const PUSH_CONCURRENCY = 15;
+const PUSH_SEND_TIMEOUT_MS = 5000;
+
+// Run `worker` over `items` with at most `limit` in flight.
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 async function dispatchDuePushNotifications(now = new Date()) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return { processed: 0, pushed: 0 };
 
-  const dueNotifications = await prisma.notification.findMany({
+  // Close anything past the retry window, delivered or not, so it never piles
+  // up. Notifications of users with no push subscription are also excluded
+  // from the batch query below, so they can't block newer ones meanwhile —
+  // they stay in-app, and still push if the user subscribes within the window.
+  const expired = await prisma.notification.updateMany({
     where: {
-      sent_at: { lte: now },
       pushed_at: null,
+      sent_at: { lte: new Date(now.getTime() - PUSH_RETRY_MAX_AGE_MS) },
     },
-    include: {
-      user: {
-        include: {
-          pushSubscriptions: true,
-        },
-      },
-      campaignRecipients: {
-        include: { campaign: { select: { title: true } } },
-        take: 1,
-      },
-    },
-    take: 100,
-    orderBy: { sent_at: "asc" },
+    data: { pushed_at: now },
   });
 
+  let processed = 0;
   let pushed = 0;
-  let notificationsWithSubscriptions = 0;
   let retriedLater = 0;
-  let expiredWithoutPush = 0;
-  for (const notification of dueNotifications) {
-    const subscriptions = notification.user?.pushSubscriptions ?? [];
-    let pushedThisNotification = 0;
-    if (subscriptions.length > 0) {
-      notificationsWithSubscriptions += 1;
-    }
-    const campaignTitle = notification.campaignRecipients?.[0]?.campaign?.title;
-    const payload = JSON.stringify({
-      title: resolveNotificationTitle({ campaignTitle, eventId: notification.event_id }),
-      body: notification.message,
-      eventId: notification.event_id ?? null,
-      // Any match-linked notification (daily match, "quiero hablar" ping,
-      // feedback reminder) opens Home and surfaces the match card.
-      matchId: notification.match_id ?? null,
-      notificationId: notification.id,
-      sentAt: notification.sent_at,
+  const dueNotificationIds: string[] = [];
+
+  for (let batch = 0; batch < PUSH_MAX_BATCHES_PER_RUN; batch += 1) {
+    const dueNotifications = await prisma.notification.findMany({
+      where: {
+        sent_at: { lte: now },
+        pushed_at: null,
+        user: { pushSubscriptions: { some: {} } },
+        // Ones that failed earlier in this run wait for the next run.
+        ...(dueNotificationIds.length > 0 ? { id: { notIn: dueNotificationIds } } : {}),
+      },
+      include: {
+        user: { include: { pushSubscriptions: true } },
+        campaignRecipients: {
+          include: { campaign: { select: { title: true } } },
+          take: 1,
+        },
+      },
+      take: PUSH_BATCH_SIZE,
+      orderBy: { sent_at: "asc" },
+    });
+    if (dueNotifications.length === 0) break;
+
+    // One job per (notification, subscription), sent in parallel with a cap
+    // and a per-request timeout so a slow push service can't stall the run.
+    const jobs = dueNotifications.flatMap((notification) => {
+      dueNotificationIds.push(notification.id);
+      const payload = JSON.stringify({
+        title: resolveNotificationTitle({
+          campaignTitle: notification.campaignRecipients?.[0]?.campaign?.title,
+          eventId: notification.event_id,
+        }),
+        body: notification.message,
+        eventId: notification.event_id ?? null,
+        // Any match-linked notification (daily match, "quiero hablar" ping,
+        // feedback reminder) opens Home and surfaces the match card.
+        matchId: notification.match_id ?? null,
+        notificationId: notification.id,
+        sentAt: notification.sent_at,
+      });
+      return (notification.user?.pushSubscriptions ?? []).map((subscription) => ({
+        notificationId: notification.id,
+        subscription,
+        payload,
+      }));
     });
 
-    for (const subscription of subscriptions) {
+    const outcomes = await mapWithConcurrency(jobs, PUSH_CONCURRENCY, async (job) => {
       try {
         await webpush.sendNotification(
           {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: subscription.p256dh,
-              auth: subscription.auth,
-            },
+            endpoint: job.subscription.endpoint,
+            keys: { p256dh: job.subscription.p256dh, auth: job.subscription.auth },
           },
-          payload,
-          { urgency: "high" },
+          job.payload,
+          { urgency: "high", timeout: PUSH_SEND_TIMEOUT_MS },
         );
-        pushed += 1;
-        pushedThisNotification += 1;
+        return { notificationId: job.notificationId, ok: true };
       } catch (error) {
         const statusCode =
           typeof error === "object" && error && "statusCode" in error
             ? Number((error as { statusCode?: number }).statusCode)
             : 0;
         if (statusCode === 404 || statusCode === 410) {
-          await prisma.pushSubscription.deleteMany({
-            where: { endpoint: subscription.endpoint },
-          });
+          await prisma.pushSubscription.deleteMany({ where: { endpoint: job.subscription.endpoint } });
         }
+        return { notificationId: job.notificationId, ok: false };
       }
-    }
+    });
 
-    if (pushedThisNotification > 0) {
-      await prisma.notification.update({
-        where: { id: notification.id },
+    const deliveredIds = Array.from(new Set(outcomes.filter((o) => o.ok).map((o) => o.notificationId)));
+    pushed += outcomes.filter((o) => o.ok).length;
+    processed += dueNotifications.length;
+    // Not delivered to any device yet: keep pushed_at null so a later run
+    // retries (helps Android/background cases) until the retry window closes.
+    retriedLater += dueNotifications.length - deliveredIds.length;
+
+    if (deliveredIds.length > 0) {
+      await prisma.notification.updateMany({
+        where: { id: { in: deliveredIds } },
         data: { pushed_at: now },
       });
-      continue;
     }
-
-    const ageMs = now.getTime() - new Date(notification.sent_at).getTime();
-    if (ageMs >= PUSH_RETRY_MAX_AGE_MS) {
-      // Stop retrying very old notifications that could not be pushed.
-      await prisma.notification.update({
-        where: { id: notification.id },
-        data: { pushed_at: now },
-      });
-      expiredWithoutPush += 1;
-    } else {
-      // Keep pushed_at null so next dispatch retries (helps Android/background cases).
-      retriedLater += 1;
-    }
+    if (dueNotifications.length < PUSH_BATCH_SIZE) break;
   }
 
   return {
-    processed: dueNotifications.length,
+    processed,
     pushed,
-    notificationsWithSubscriptions,
     retriedLater,
-    expiredWithoutPush,
-    dueNotificationIds: dueNotifications.map((notification) => notification.id),
+    expiredWithoutPush: expired.count,
+    dueNotificationIds,
   };
 }
 
+// Push runs are triggered from several places (30 s interval, the 5 min job
+// set, campaign sends, new subscriptions). Never let two overlap: a second
+// concurrent run would pick up the same undelivered rows and push them twice.
+let pushDispatchRunning = false;
+
 async function runPushDispatch(reason: string) {
+  if (pushDispatchRunning) {
+    return { processed: 0, pushed: 0, skipped: "already_running" as const };
+  }
+  pushDispatchRunning = true;
   const startedAt = new Date();
   try {
     const result = await dispatchDuePushNotifications(startedAt);
@@ -340,6 +378,8 @@ async function runPushDispatch(reason: string) {
       error: error instanceof Error ? error.message : "unknown error",
     };
     throw error;
+  } finally {
+    pushDispatchRunning = false;
   }
 }
 
@@ -872,26 +912,35 @@ async function dispatchCampaign(campaignId: string, reason = "manual") {
       select: { id: true, user_id: true, notification_id: true },
     });
 
-    let createdNotificationsCount = 0;
-    for (const recipient of recipients) {
-      if (recipient.notification_id) continue;
-      const createdNotification = await prisma.notification.create({
-        data: {
-          id: crypto.randomUUID(),
-          user_id: recipient.user_id,
-          event_id: campaign.event_id,
-          message: campaign.message,
-          sent_at: now,
-        },
-      });
-      createdNotificationsCount += 1;
-      await prisma.notificationCampaignRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          notification_id: createdNotification.id,
-          delivery_status: "notification_created",
-        },
-      });
+    // Batch: one insert for all notifications and one update linking them to
+    // their recipient rows (was 2 queries per recipient, in sequence).
+    const pendingRecipients = recipients
+      .filter((recipient) => !recipient.notification_id)
+      .map((recipient) => ({ ...recipient, notificationId: crypto.randomUUID() }));
+    const createdNotificationsCount = pendingRecipients.length;
+    if (pendingRecipients.length > 0) {
+      await prisma.$transaction([
+        prisma.notification.createMany({
+          data: pendingRecipients.map((recipient) => ({
+            id: recipient.notificationId,
+            user_id: recipient.user_id,
+            event_id: campaign.event_id,
+            message: campaign.message,
+            sent_at: now,
+          })),
+        }),
+        prisma.$executeRaw`
+          UPDATE "NotificationCampaignRecipient" AS r
+          SET notification_id = v.notification_id::uuid,
+              delivery_status = 'notification_created',
+              updated_at = now()
+          FROM unnest(
+            ${pendingRecipients.map((recipient) => recipient.id)}::text[],
+            ${pendingRecipients.map((recipient) => recipient.notificationId)}::text[]
+          ) AS v(recipient_id, notification_id)
+          WHERE r.id = v.recipient_id::uuid
+        `,
+      ]);
     }
 
     const pushResult = await runPushDispatch(`campaign-${reason}-${campaign.id}`).catch(() => ({
@@ -2075,6 +2124,11 @@ app.post("/push/unsubscribe", async (req, res) => {
 });
 
 // Directories
+
+// Matching-only columns: the embedding is ~30 KB per startup and `challenges`
+// is the raw application form; no client renders either.
+const STARTUP_INTERNAL_FIELDS = { challenge_embedding: true, challenges: true } as const;
+
 app.get("/people", async (req, res) => {
   const q = z.string().optional().parse(req.query.q);
   const people = await prisma.person.findMany({
@@ -2119,6 +2173,7 @@ app.get("/startups", async (req, res) => {
         }
       : undefined,
     orderBy: { name: "asc" },
+    omit: STARTUP_INTERNAL_FIELDS,
   });
   res.set("Cache-Control", "private, max-age=30");
   res.json(startups);
@@ -2128,6 +2183,7 @@ app.get("/startups/:id", async (req, res) => {
   const id = z.string().parse(req.params.id);
   const startup = await prisma.startup.findUnique({
     where: { id },
+    omit: STARTUP_INTERNAL_FIELDS,
   });
   if (!startup) {
     res.status(404).json({ error: "Startup not found" });
@@ -2190,8 +2246,26 @@ app.get("/users/:userId/schedule", async (req, res) => {
 });
 
 // Notifications (in-app alerts)
+// The caller's own person, or null (after sending 401/403) if the token
+// doesn't belong to `userId` (person id or auth user id).
+async function requireSelf(req: Request, res: Response, userId: string) {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const person = await resolvePersonFromAuth(auth);
+  if (!person || (userId !== person.id && userId !== (person.user_id || ""))) {
+    res.status(403).json({ error: "Forbidden" });
+    return null;
+  }
+  return person;
+}
+
 app.get("/users/:userId/notifications", async (req, res) => {
-  const userId = z.string().parse(req.params.userId);
+  const me = await requireSelf(req, res, z.string().parse(req.params.userId));
+  if (!me) return;
+  const userId = me.id;
   const unread = z
     .enum(["true", "false"])
     .optional()
@@ -2238,12 +2312,23 @@ app.get("/users/:userId/notifications", async (req, res) => {
 
 app.patch("/notifications/:notificationId/read", async (req, res) => {
   const notificationId = z.string().parse(req.params.notificationId);
+  const auth = (req as AuthenticatedRequest).auth;
+  const me = auth?.email && auth?.sub ? await resolvePersonFromAuth(auth) : null;
+  if (!me) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   try {
-    const updated = await prisma.notification.update({
-      where: { id: notificationId },
+    // Only your own notifications.
+    const result = await prisma.notification.updateMany({
+      where: { id: notificationId, user_id: me.id },
       data: { is_read: true },
     });
-    res.json(updated);
+    if (result.count === 0) {
+      res.status(404).json({ error: "Notification not found" });
+      return;
+    }
+    res.json({ id: notificationId, is_read: true });
   } catch (error) {
     if (isMissingTableError(error, "Notification")) {
       res.json({ id: notificationId, is_read: true, skipped: true });
@@ -2255,7 +2340,9 @@ app.patch("/notifications/:notificationId/read", async (req, res) => {
 });
 
 app.patch("/users/:userId/notifications/read-all", async (req, res) => {
-  const userId = z.string().parse(req.params.userId);
+  const me = await requireSelf(req, res, z.string().parse(req.params.userId));
+  if (!me) return;
+  const userId = me.id;
   try {
     const result = await prisma.notification.updateMany({
       where: {

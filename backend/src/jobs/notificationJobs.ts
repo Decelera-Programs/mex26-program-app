@@ -1,71 +1,88 @@
 import { prisma } from "../db.js";
+import { dateKeyInTimezone } from "../lib/dateTime.js";
+
+const PROGRAM_TIMEZONE = "America/Mexico_City";
+// Reminder lead time. The job runs every 5 minutes, so an event is picked up
+// on the first run once it's within this window (26–31 min before it starts).
+const REMINDER_LEAD_MS = 31 * 60 * 1000;
+
+// Off unless EVENT_REMINDERS_ENABLED=true. Until 2026-09 this job never
+// delivered anything (it created rows without an id, which the uuid column
+// rejected), so turning it on starts a new stream of pushes for everyone.
+// EVENT_REMINDER_TYPES optionally limits it to some event types, e.g.
+// "talk,activity,wellness" (empty = every type).
+function reminderConfig() {
+  const enabled = (process.env.EVENT_REMINDERS_ENABLED || "").trim().toLowerCase() === "true";
+  const types = (process.env.EVENT_REMINDER_TYPES || "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  return { enabled, types };
+}
 
 function minutesBetween(a: Date, b: Date) {
-  return Math.floor((b.getTime() - a.getTime()) / 60000);
+  return Math.max(1, Math.round((b.getTime() - a.getTime()) / 60000));
+}
+
+function normalizeContactType(raw: unknown) {
+  if (typeof raw !== "string") return "";
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "experiencemaker" ? "experience_maker" : normalized;
+}
+
+function visibleTo(event: { visible_to_contact_types: unknown }, contactType: string) {
+  const allowed = Array.isArray(event.visible_to_contact_types)
+    ? event.visible_to_contact_types.map(normalizeContactType).filter(Boolean)
+    : [];
+  return allowed.length === 0 || allowed.includes(normalizeContactType(contactType));
 }
 
 /**
- * Create "30 minutes before" notifications for upcoming events.
- *
- * Assumptions:
- * - Runs periodically (e.g. every minute).
- * - Writes Notification rows; delivery (push/email) can be layered later.
- * - Uses a simple dedupe rule: one reminder per (user_id, event_id) within the window.
+ * Create a "starts in ~30 minutes" notification per (person, upcoming event),
+ * once. Only for people the event is visible to and who are on site that day
+ * (no arrival/departure dates = assumed on site). Push delivery is done by the
+ * regular push dispatch.
  */
 export async function triggerThirtyMinuteReminders(now = new Date()) {
-  const windowStart = new Date(now.getTime() + 29 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + 31 * 60 * 1000);
+  const config = reminderConfig();
+  if (!config.enabled) return { created: 0, checkedEvents: 0, disabled: true };
 
   const upcoming = await prisma.event.findMany({
     where: {
-      start_time: {
-        gte: windowStart,
-        lte: windowEnd,
-      },
+      start_time: { gt: now, lte: new Date(now.getTime() + REMINDER_LEAD_MS) },
+      ...(config.types.length > 0 ? { type: { in: config.types, mode: "insensitive" as const } } : {}),
     },
-    select: {
-      id: true,
-      title: true,
-      start_time: true,
-      location: true,
-    },
+    select: { id: true, title: true, start_time: true, location: true, visible_to_contact_types: true },
   });
+  if (upcoming.length === 0) return { created: 0, checkedEvents: 0 };
 
-  let created = 0;
-  const audience = await prisma.person.findMany({
-    select: { id: true },
-    orderBy: { full_name: "asc" },
-  });
+  const [people, alreadyReminded] = await Promise.all([
+    prisma.person.findMany({
+      select: { id: true, contact_type: true, arrival_date: true, departure_date: true },
+    }),
+    // Dedupe against earlier reminders only — a campaign linked to the same
+    // event shouldn't suppress the reminder.
+    prisma.notification.findMany({
+      where: { event_id: { in: upcoming.map((e) => e.id) }, campaignRecipients: { none: {} } },
+      select: { user_id: true, event_id: true },
+    }),
+  ]);
+  const done = new Set(alreadyReminded.map((n) => `${n.user_id}:${n.event_id}`));
 
+  const rows = [];
   for (const evt of upcoming) {
-    for (const person of audience) {
-      const already = await prisma.notification.findFirst({
-        where: {
-          user_id: person.id,
-          event_id: evt.id,
-          // "sent_at" close to now is enough for dedupe in this simple job
-          sent_at: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
-        },
-        select: { id: true },
-      });
-      if (already) continue;
-
-      const mins = minutesBetween(now, evt.start_time);
-      const message = `${evt.title} starts in ~${mins} minutes${evt.location ? ` · ${evt.location}` : ""}`;
-
-      await prisma.notification.create({
-        data: {
-          user_id: person.id,
-          event_id: evt.id,
-          message,
-          sent_at: now,
-        },
-      });
-
-      created += 1;
+    const dayKey = dateKeyInTimezone(evt.start_time, PROGRAM_TIMEZONE) || "";
+    const message = `${evt.title} starts in ~${minutesBetween(now, evt.start_time)} minutes${evt.location ? ` · ${evt.location}` : ""}`;
+    for (const person of people) {
+      if (done.has(`${person.id}:${evt.id}`)) continue;
+      if (!visibleTo(evt, person.contact_type || "")) continue;
+      const arrivalKey = dateKeyInTimezone(person.arrival_date, PROGRAM_TIMEZONE);
+      const departureKey = dateKeyInTimezone(person.departure_date, PROGRAM_TIMEZONE);
+      if ((arrivalKey && dayKey < arrivalKey) || (departureKey && dayKey > departureKey)) continue;
+      rows.push({ id: crypto.randomUUID(), user_id: person.id, event_id: evt.id, message, sent_at: now });
     }
   }
 
-  return { created, checkedEvents: upcoming.length };
+  if (rows.length > 0) await prisma.notification.createMany({ data: rows });
+  return { created: rows.length, checkedEvents: upcoming.length };
 }
-
