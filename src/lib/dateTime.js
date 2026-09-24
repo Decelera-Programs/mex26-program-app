@@ -16,6 +16,16 @@
 // `programWallClockToDate`, so the backend always receives a real instant.
 export const PROGRAM_TIMEZONE = "America/Mexico_City";
 
+// First day of the program (Day 1), as a Mexico calendar date. Drives the
+// Home countdown and the Moments day numbering.
+export const PROGRAM_START_DATE = "2026-10-10";
+
+/** Whole days from PROGRAM_START_DATE to a YYYY-MM-DD key (start = 0). */
+export function daysSinceProgramStart(dayKey) {
+  const toUtcMs = (key) => Date.UTC(+key.slice(0, 4), +key.slice(5, 7) - 1, +key.slice(8, 10));
+  return Math.round((toUtcMs(String(dayKey).slice(0, 10)) - toUtcMs(PROGRAM_START_DATE)) / 86400000);
+}
+
 const HAS_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
 const NAIVE_DATETIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
 

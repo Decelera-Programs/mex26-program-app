@@ -6,21 +6,17 @@ import AttentionWrap from "../components/AttentionWrap";
 import { CalendarDays, ChevronRight, MapPin, Users } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PROGRAM_TIMEZONE, getTodayKey, programNow } from "../lib/dateTime";
+import { PROGRAM_TIMEZONE, daysSinceProgramStart, getTodayKey, programNow } from "../lib/dateTime";
 import { DUR, SPRING_GENTLE } from "../lib/motion";
 import { isMatchOpened } from "../lib/matchFlags";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
-
-// TODO: set the real Decelera México 2026 start date.
-const PROGRAM_START_DATE = "2026-05-23";
 
 const FALLBACK_HERO_CONTENT = {
   phase_label: "",
   badge_text: `TODAY · ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: PROGRAM_TIMEZONE }).format(new Date())}`,
   title: "Decelera\nMéxico 2026",
   subtitle: (() => {
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(new Date());
-    const diff = Math.ceil((new Date(PROGRAM_START_DATE) - new Date(todayStr)) / 86400000);
+    const diff = -daysSinceProgramStart(getTodayKey());
     return diff > 0 ? `${diff} days until the program` : "Welcome to the program.";
   })(),
   body_text: "Slow down before you scale. We start the week soft - long walks, no laptops before lunch, dinners that run late.",

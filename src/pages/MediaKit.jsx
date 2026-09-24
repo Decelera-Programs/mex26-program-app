@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion as Motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { daysSinceProgramStart } from "../lib/dateTime";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
 const DAY_META = [
@@ -29,7 +30,7 @@ function DayCard({ d, i }) {
       style={{
         borderRadius: 16,
         background: hasPhoto
-          ? `url(${d.coverUrl}) center/cover no-repeat`
+          ? `url(${JSON.stringify(d.coverUrl)}) center/cover no-repeat`
           : d.gradient,
         aspectRatio: "1 / 1",
         display: "flex",
@@ -76,14 +77,16 @@ export default function MediaKit() {
       .order("date", { ascending: true })
       .then(({ data }) => {
         if (!data?.length) return;
-        const startDate = new Date(data[0].date);
+        // Day 1 = the program's first day (not whichever row comes first),
+        // so an arrival-day row doesn't shift every label. Gradients cycle,
+        // so a longer program isn't cut off at 7 days.
         const merged = data
           .map((row) => {
-            const dayNum = Math.round((new Date(row.date) - startDate) / 86_400_000) + 1;
-            const meta = DAY_META.find((m) => m.day === dayNum);
-            if (!meta) return null;
+            const dayNum = daysSinceProgramStart(row.date) + 1;
+            if (dayNum < 1) return null;
             return {
-              ...meta,
+              day: dayNum,
+              gradient: DAY_META[(dayNum - 1) % DAY_META.length].gradient,
               flickrAlbumUrl: row.media_album_url ?? null,
               coverUrl: row.media_cover_url ?? null,
             };
