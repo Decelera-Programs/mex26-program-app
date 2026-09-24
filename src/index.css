@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Fustat:wght@400;500;600;700&family=Taviraj:wght@200;300;400;500;600;700&display=swap");
+/* Fonts (Fustat, Taviraj) are loaded from index.html, not @import here: an
+   @import only starts after this CSS has downloaded, delaying the first paint. */
 
 @config "../tailwind.config.js";
 
@@ -1062,6 +1063,9 @@
   background: radial-gradient(58% 58% at 50% 45%, rgba(31, 208, 239, 0.6), rgba(31, 208, 239, 0) 72%);
   filter: blur(16px);
   pointer-events: none;
+  /* Own compositor layer: the blur is rasterized once and the pulse only
+     animates opacity/transform, instead of re-blurring every frame. */
+  will-change: opacity, transform;
   animation: dc-attn-glow 3.2s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {

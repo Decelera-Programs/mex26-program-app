@@ -3,7 +3,18 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
 
+// A chunk failed to load (usually a page opened on an old deploy): reload to
+// get the current one. At most once every 30 s, so a flaky connection that
+// keeps serving the cached shell can't turn this into a reload loop.
 window.addEventListener("vite:preloadError", () => {
+  const KEY = "decelera.preloadErrorReloadAt";
+  try {
+    const last = Number(sessionStorage.getItem(KEY)) || 0;
+    if (Date.now() - last < 30000) return;
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable: still reload once */
+  }
   window.location.reload();
 });
 

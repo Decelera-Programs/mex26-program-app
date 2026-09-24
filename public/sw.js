@@ -1,10 +1,17 @@
 /* Simple service worker for offline support.
    This is intentionally minimal and backend-free. */
 
-const CACHE_NAME = "decelera-mx-pwa-v5";
+const CACHE_NAME = "decelera-mx-pwa-v6";
 
 // Core shell files. Vite will fingerprint JS/CSS, so we cache navigation + static assets.
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.ico"];
+
+// Venue wifi with ~200 people can hang a request for a long time. Opening the
+// app waits at most this long for the network before using the cached shell
+// (the network response still refreshes the cache for next time).
+const NAVIGATION_TIMEOUT_MS = 2500;
+// Fingerprinted assets from old deploys pile up; drop the ones not used for this long.
+const ASSET_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -21,29 +28,73 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => (k === CACHE_NAME ? null : caches.delete(k))));
       await self.clients.claim();
+      await pruneOldAssets();
     })(),
   );
 });
 
-// Network-first for navigations (SPA routes), cache-first for same-origin assets.
+async function pruneOldAssets() {
+  const cache = await caches.open(CACHE_NAME);
+  const now = Date.now();
+  for (const req of await cache.keys()) {
+    if (!new URL(req.url).pathname.startsWith("/assets/")) continue;
+    const res = await cache.match(req);
+    const cachedAt = Number(res?.headers.get("x-sw-cached-at")) || 0;
+    if (now - cachedAt > ASSET_MAX_AGE_MS) await cache.delete(req);
+  }
+}
+
+// The worker itself rarely changes (so `activate` rarely runs): also prune
+// after a fresh shell is fetched, at most once an hour.
+let lastPruneAt = 0;
+function maybePrune() {
+  if (Date.now() - lastPruneAt < 60 * 60 * 1000) return undefined;
+  lastPruneAt = Date.now();
+  return pruneOldAssets().catch(() => {});
+}
+
+// Store a copy stamped with when it was cached (used by pruneOldAssets).
+async function putStamped(cache, req, res) {
+  const headers = new Headers(res.headers);
+  headers.set("x-sw-cached-at", String(Date.now()));
+  const body = await res.blob();
+  await cache.put(req, new Response(body, { status: res.status, statusText: res.statusText, headers }));
+}
+
+// Navigations: network with a timeout, falling back to the cached shell.
+// Assets: cache-first (they're fingerprinted, so a cached copy is never stale).
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Only handle same-origin requests
-  if (url.origin !== self.location.origin) return;
+  // Only handle same-origin GETs (the API and Supabase are other origins).
+  if (url.origin !== self.location.origin || req.method !== "GET") return;
 
-  // SPA navigation: try network, fall back to cached "/" shell.
+  // SPA navigation: every route serves the same index.html shell.
   if (req.mode === "navigate") {
     event.respondWith(
       (async () => {
-        try {
-          const fresh = await fetch(req);
+        const cache = await caches.open(CACHE_NAME);
+        const network = fetch(req).then((fresh) => {
+          if (fresh.ok) {
+            const copy = fresh.clone();
+            event.waitUntil(cache.put("/", copy).then(maybePrune));
+          }
           return fresh;
+        });
+        // Keep the network request alive after a timeout so it still refreshes the shell.
+        event.waitUntil(network.catch(() => {}));
+        const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS));
+        try {
+          const first = await Promise.race([network, timeout]);
+          if (first) return first;
         } catch {
-          const cache = await caches.open(CACHE_NAME);
-          return (await cache.match("/")) || Response.error();
+          // Offline / network error: fall through to the cached shell.
         }
+        const cached = await cache.match("/");
+        if (cached) return cached;
+        // No shell cached yet (first ever visit): nothing to fall back to, wait for the network.
+        return network.catch(() => Response.error());
       })(),
     );
     return;
@@ -56,8 +107,11 @@ self.addEventListener("fetch", (event) => {
       const cached = await cache.match(req);
       if (cached) return cached;
       const fresh = await fetch(req);
-      // Cache successful GET responses.
-      if (req.method === "GET" && fresh.ok) cache.put(req, fresh.clone());
+      // The static server answers unknown paths (e.g. a chunk from an old
+      // deploy) with index.html and a 200. Never cache that as the asset, or
+      // the device would keep getting HTML for that JS file.
+      const isHtml = (fresh.headers.get("content-type") || "").includes("text/html");
+      if (fresh.ok && !isHtml) event.waitUntil(putStamped(cache, req, fresh.clone()));
       return fresh;
     })(),
   );
