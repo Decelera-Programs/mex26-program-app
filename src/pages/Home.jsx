@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCurrentUser, getHomeDailyContent, getMyMatches, getOneOnOneAudio, listEvents, listMyOneOnOnes, listPeople } from "../api/dataService";
+import { getCurrentUser, getHomeDailyContent, getMyMatches, listEvents, listMyOneOnOnes, listPeople } from "../api/dataService";
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
@@ -159,12 +159,7 @@ export default function Home() {
         setHomeLoading(false);
 
         if (oneOnOnes.length > 0 && userData?.contact_type === "experience_maker") {
-          const audioResults = await Promise.all(
-            oneOnOnes.map((oo) => getOneOnOneAudio(oo.id).catch(() => null))
-          );
-          if (!cancelled) {
-            setMyOneOnOnesWithoutAudio(audioResults.filter((r) => !r?.active_audio?.url).length);
-          }
+          setMyOneOnOnesWithoutAudio(oneOnOnes.filter((oo) => !oo.has_active_audio).length);
         }
       } catch {
         if (!cancelled) setHeroContent(FALLBACK_HERO_CONTENT);
@@ -173,20 +168,16 @@ export default function Home() {
       }
     }
 
+    // Retry only on an error (transient auth/session timing), once. An empty
+    // list is a real answer, not a reason to wait.
     async function loadEventsWithRetry() {
-      for (let i = 0; i < 8; i += 1) {
+      for (let i = 0; i < 2; i += 1) {
         try {
           const data = await listEvents();
-          if (cancelled) return;
-          if (Array.isArray(data) && data.length > 0) {
-            setEvents(data);
-            return;
-          }
+          if (!cancelled) setEvents(Array.isArray(data) ? data : []);
+          return;
         } catch {
-          // Retry to absorb transient auth/session timing.
-        }
-        if (i < 7) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          if (i === 0) await new Promise((resolve) => setTimeout(resolve, 600));
         }
       }
       if (!cancelled) setEvents([]);

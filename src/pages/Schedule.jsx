@@ -152,31 +152,26 @@ export default function Schedule() {
   useEffect(() => {
     let cancelled = false;
 
+    // In parallel with /me (no need to wait for the user). Retry once, only on
+    // an error; keep existing master events if both attempts fail.
     async function fetchMasterEvents() {
-      if (!user?.id) return;
-      for (let i = 0; i < 8; i += 1) {
+      for (let i = 0; i < 2; i += 1) {
         try {
           const data = await listEvents();
           if (cancelled) return;
-          if (Array.isArray(data) && data.length > 0) {
-            setMasterEvents(data);
-            return;
-          }
+          if (Array.isArray(data) && data.length > 0) setMasterEvents(data);
+          return;
         } catch {
-          // Keep retrying below to absorb transient auth/backend hiccups.
-        }
-        if (i < 7) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          if (i === 0) await new Promise((resolve) => setTimeout(resolve, 600));
         }
       }
-      // Keep existing master events if refresh attempts fail.
     }
 
     fetchMasterEvents();
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, []);
 
   const safeEvents = useMemo(() => {
     const fallback = events ?? [];

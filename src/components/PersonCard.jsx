@@ -67,8 +67,10 @@ export default function PersonCard({ person, index = 0 }) {
             >
               {person.photo_url && !imageFailed ? (
                 <img
-                  src={person.photo_url}
+                  src={person.photo_thumb_url || person.photo_url}
                   alt={person.full_name}
+                  loading="lazy"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   onError={() => setImageFailed(true)}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}

@@ -123,7 +123,7 @@ function parseExpertiseTags(raw) {
   }
 }
 
-function normalizePhotoUrl(raw) {
+function normalizePhotoUrl(raw, width = 1200) {
   if (typeof raw !== "string") return "";
   const url = raw.trim();
   if (!url) return "";
@@ -134,9 +134,9 @@ function normalizePhotoUrl(raw) {
 
     const toDriveImageUrl = (fileId) =>
       // googleusercontent tends to be more reliable for <img> rendering than drive page URLs.
-      `https://lh3.googleusercontent.com/d/${fileId}=w1200`;
+      `https://lh3.googleusercontent.com/d/${fileId}=w${width}`;
 
-    const toDriveThumbnail = (fileId) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`;
+    const toDriveThumbnail = (fileId) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w${width}`;
     const fromId = (fileId) => toDriveImageUrl(fileId) || toDriveThumbnail(fileId);
 
     // https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
@@ -188,6 +188,9 @@ function normalizePerson(person) {
     // Backward-compatible alias while components migrate.
     person_type: contactType,
     photo_url: normalizePhotoUrl(person.photo_url),
+    // Small version for lists / avatars (46–88 px on screen): the full one is
+    // 1200 px, and People shows ~200 of them.
+    photo_thumb_url: normalizePhotoUrl(person.photo_url, 200),
     email: person.email ?? person.id,
     expertise_tags: parseExpertiseTags(person.expertise_tags),
   };
@@ -279,20 +282,32 @@ export async function getCurrentUser() {
   }
 }
 
+// Serve the cached value right away (even if stale) and refresh it in the
+// background when it's past its TTL; only the very first load waits.
+function staleWhileRevalidate(cache, load) {
+  const refresh = () => {
+    if (!cache.promise) {
+      cache.promise = load()
+        .then((value) => {
+          cache.value = value;
+          cache.expiresAt = Date.now() + CACHE_TTL_MS;
+          return value;
+        })
+        .finally(() => {
+          cache.promise = null;
+        });
+    }
+    return cache.promise;
+  };
+  if (cache.value) {
+    if (Date.now() >= cache.expiresAt) refresh().catch(() => {});
+    return Promise.resolve(cache.value);
+  }
+  return refresh();
+}
+
 export async function listEvents() {
-  if (Date.now() < eventsCache.expiresAt && eventsCache.value) return eventsCache.value;
-  if (eventsCache.promise) return eventsCache.promise;
-
-  eventsCache.promise = api("/events").then((events) => {
-    const normalized = events.map(normalizeEvent);
-    eventsCache.value = normalized;
-    eventsCache.expiresAt = Date.now() + CACHE_TTL_MS;
-    return normalized;
-  }).finally(() => {
-    eventsCache.promise = null;
-  });
-
-  return eventsCache.promise;
+  return staleWhileRevalidate(eventsCache, () => api("/events").then((events) => events.map(normalizeEvent)));
 }
 
 // { today: match | null, pending: match[] } — `pending` are recent matches the
@@ -337,19 +352,7 @@ export async function listEventPeople(eventId) {
 }
 
 export async function listPeople() {
-  if (Date.now() < peopleCache.expiresAt && peopleCache.value) return peopleCache.value;
-  if (peopleCache.promise) return peopleCache.promise;
-
-  peopleCache.promise = api("/people").then((people) => {
-    const normalized = people.map(normalizePerson).filter((p) => p && p.contact_type);
-    peopleCache.value = normalized;
-    peopleCache.expiresAt = Date.now() + CACHE_TTL_MS;
-    return normalized;
-  }).finally(() => {
-    peopleCache.promise = null;
-  });
-
-  return peopleCache.promise;
+  return staleWhileRevalidate(peopleCache, () => api("/people").then((people) => people.map(normalizePerson).filter((p) => p && p.contact_type)));
 }
 
 export async function getPersonById(id) {
@@ -358,19 +361,7 @@ export async function getPersonById(id) {
 }
 
 export async function listStartups() {
-  if (Date.now() < startupsCache.expiresAt && startupsCache.value) return startupsCache.value;
-  if (startupsCache.promise) return startupsCache.promise;
-
-  startupsCache.promise = api("/startups").then((startups) => {
-    const normalized = Array.isArray(startups) ? startups.map(normalizeStartup) : [];
-    startupsCache.value = normalized;
-    startupsCache.expiresAt = Date.now() + CACHE_TTL_MS;
-    return normalized;
-  }).finally(() => {
-    startupsCache.promise = null;
-  });
-
-  return startupsCache.promise;
+  return staleWhileRevalidate(startupsCache, () => api("/startups").then((startups) => (Array.isArray(startups) ? startups.map(normalizeStartup) : [])));
 }
 
 export async function getStartupById(id) {

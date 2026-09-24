@@ -367,7 +367,7 @@ export default function Layout() {
             <Motion.div
               key={location.pathname}
               // Swiping between profiles runs its own horizontal transition.
-              initial={location.state?.swipe ? false : { opacity: 0, y: 14 }}
+              initial={location.state?.swipe ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: DUR.page, ease: EASE.out }}
               className="w-full"

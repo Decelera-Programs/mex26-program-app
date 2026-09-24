@@ -1651,10 +1651,19 @@ app.get("/one-on-ones/me", async (req, res) => {
         updatedAt: true,
         startup: { select: { id: true, name: true, logo_url: true } },
         em: { select: { id: true, full_name: true, photo_url: true } },
+        active_audio_url: true,
+        active_audio_storage_path: true,
       },
       orderBy: { start_time: "asc" },
     });
-    res.json(records);
+    // Expose only whether an audio exists (Home's "1:1s without audio" badge),
+    // so the client doesn't need one signed-URL request per 1:1 for it.
+    res.json(
+      records.map(({ active_audio_url, active_audio_storage_path, ...record }) => ({
+        ...record,
+        has_active_audio: Boolean(active_audio_url || active_audio_storage_path),
+      })),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load 1:1 meetings";
     res.status(500).json({ error: message });

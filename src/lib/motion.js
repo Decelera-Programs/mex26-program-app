@@ -16,7 +16,7 @@ export const DUR = {
   micro: 0.18, // toggles, hovers, small menus
   base: 0.52, // card / list-item entrance
   expand: 0.52, // card expand-collapse, grow-in
-  page: 0.5, // route change
+  page: 0.18, // route change — short: a long fade reads as a slow app
 };
 
 // Physical spring with a light, tasteful settle — the default for a card or
@@ -30,8 +30,9 @@ export const SPRING_GENTLE = { type: "spring", stiffness: 220, damping: 30, mass
 // Snappier, for small frequent UI (dropdowns, chips, popovers).
 export const SPRING_SNAP = { type: "spring", stiffness: 340, damping: 28, mass: 0.9 };
 
-// Per-item delay for a staggered list reveal, capped so long lists don't crawl.
-export const stagger = (index, step = 0.07, cap = 10) => Math.min(index, cap) * step;
+// Per-item delay for a staggered list reveal, capped so long lists don't crawl
+// (the first screenful ripples in; everything after appears at once).
+export const stagger = (index, step = 0.03, cap = 6) => Math.min(index, cap) * step;
 
 // Ready-made props for the common "fade + rise into place" entrance (spring).
 export const fadeUp = (distance = 18) => ({

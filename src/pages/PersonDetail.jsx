@@ -39,7 +39,7 @@ function initialsOf(name) {
 }
 
 function toPeek(p) {
-  return p ? { id: p.id, label: p.full_name, image: p.photo_url, initials: initialsOf(p.full_name) } : null;
+  return p ? { id: p.id, label: p.full_name, image: p.photo_thumb_url || p.photo_url, initials: initialsOf(p.full_name) } : null;
 }
 
 // Without a saved browse list (deep link, coming from a startup…), swipe

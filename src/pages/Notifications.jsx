@@ -64,9 +64,11 @@ export default function Notifications() {
 
     fetchNotifications(true);
 
+    // Poll while the page is open, but not while the app is in the background.
     const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       fetchNotifications(false).catch(() => {});
-    }, 15000);
+    }, 30000);
 
     return () => {
       cancelled = true;
