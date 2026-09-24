@@ -6,7 +6,7 @@ import AttentionWrap from "../components/AttentionWrap";
 import { CalendarDays, ChevronRight, MapPin, Users } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PROGRAM_TIMEZONE, getTodayKey } from "../lib/dateTime";
+import { PROGRAM_TIMEZONE, getTodayKey, programNow } from "../lib/dateTime";
 import { DUR, SPRING_GENTLE } from "../lib/motion";
 import { isMatchOpened } from "../lib/matchFlags";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
@@ -246,7 +246,8 @@ export default function Home() {
   }, [events]);
   const nextEventIndex = useMemo(() => {
     if (!todaysEvents.length) return -1;
-    const now = new Date();
+    // Event times are naive Mexico wall clock, so "now" must be too.
+    const now = programNow();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const idx = todaysEvents.findIndex((event) => {
       const start = getEventStart(event);

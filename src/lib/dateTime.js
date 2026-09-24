@@ -1,24 +1,97 @@
-// The program runs in Mexico. Event times in the database are stored as
-// "floating" wall-clock values (no timezone): whatever is typed as the
-// published Mexico schedule is what every attendee sees, regardless of their
-// device timezone. So event formatters below deliberately do NOT pass a
-// `timeZone` option and `parseEventDate` does NOT coerce naive strings to UTC.
+// The program runs in Mexico and every time in the app is shown in Mexico
+// time, whatever the device's timezone (the team previews from Spain).
 //
-// PROGRAM_TIMEZONE is only used for "what day is it right now" style checks
-// (today's schedule, on-site presence), so those flip at Mexico midnight.
+// The database stores real instants (timestamptz; Prisma serializes them as
+// UTC, e.g. "2026-10-10T14:00:00.000Z" = 08:00 in Mexico). The data layer
+// converts event / 1:1 times into naive Mexico wall-clock strings
+// ("2026-10-10T08:00:00") with `toProgramWallClock`, and every formatter and
+// moment() call below reads those naive strings as-is. Anything compared
+// against them ("what's on now", "next event") must use `programNow()`, which
+// is the current Mexico wall clock on the same naive footing.
+//
+// Values that still carry a zone (campaign sent_at / scheduled_for, note
+// timestamps…) are converted to Mexico time by the formatters too.
+//
+// Writing back (campaign scheduled_for) goes the other way with
+// `programWallClockToDate`, so the backend always receives a real instant.
 export const PROGRAM_TIMEZONE = "America/Mexico_City";
+
+const HAS_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+const NAIVE_DATETIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
+
+const programPartsFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: PROGRAM_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function programParts(date) {
+  const parts = {};
+  for (const { type, value } of programPartsFormatter.formatToParts(date)) parts[type] = value;
+  // Some engines still print midnight as "24" even with h23.
+  if (parts.hour === "24") parts.hour = "00";
+  return parts;
+}
+
+/**
+ * Real instant (Date, or string with Z / offset) -> naive Mexico wall-clock
+ * string "YYYY-MM-DDTHH:mm:ss". Naive strings are assumed to already be
+ * Mexico wall clock and are only normalized. Unparseable input is returned
+ * untouched.
+ */
+export function toProgramWallClock(value) {
+  if (value == null || value === "") return value;
+  if (!(value instanceof Date)) {
+    const s = String(value).trim();
+    const naive = s.match(NAIVE_DATETIME);
+    if (naive && !HAS_ZONE.test(s)) {
+      return `${naive[1]}-${naive[2]}-${naive[3]}T${naive[4]}:${naive[5]}:${naive[6] || "00"}`;
+    }
+    value = new Date(s);
+  }
+  if (Number.isNaN(value.getTime())) return value;
+  const p = programParts(value);
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+}
+
+/** Current Mexico wall clock, on the same naive footing as event times. */
+export function programNow() {
+  return new Date(toProgramWallClock(new Date()));
+}
+
+/**
+ * Mexico wall-clock string ("YYYY-MM-DDTHH:mm", e.g. a datetime-local input)
+ * -> the real instant, whatever the device timezone. Null if unparseable.
+ */
+export function programWallClockToDate(value) {
+  const m = String(value || "").trim().match(NAIVE_DATETIME);
+  if (!m) return null;
+  const asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  const offsetAt = (ms) => {
+    const p = programParts(new Date(ms));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+  };
+  // Two passes settle the offset even across a DST change.
+  let instant = asUtc - offsetAt(asUtc);
+  instant = asUtc - offsetAt(instant);
+  return new Date(instant);
+}
 
 function parseEventDate(value) {
   if (value == null) return null;
   if (value instanceof Date) {
+    // Dates here are naive wall-clock values (e.g. from programNow()).
     return Number.isNaN(value.getTime()) ? null : value;
   }
   const raw = String(value).trim();
   if (!raw) return null;
-  const normalized = raw.includes(" ") && !raw.includes("T") ? raw.replace(" ", "T") : raw;
-  // Naive timestamps are treated as floating local wall-clock time (no "Z").
-  // Timestamps that already carry an explicit offset are respected as-is.
-  const date = new Date(normalized);
+  // Zoned values become Mexico wall clock; naive ones are read verbatim.
+  const date = new Date(toProgramWallClock(raw));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

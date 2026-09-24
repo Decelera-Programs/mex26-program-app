@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
+import { toProgramWallClock } from "../lib/dateTime";
 import { Building2, Check, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, PenLine, Square, Upload, User, X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
@@ -794,7 +795,7 @@ export default function TeamNotes() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", margin: 0 }} className="truncate">{name}</p>
                         <p style={{ fontSize: 11, color: "#6E7892", margin: 0 }}>
-                          {note.target_type === "startup" ? "Startup" : "Founder"} · {moment(note.createdat).format("MMM D, HH:mm")}
+                          {note.target_type === "startup" ? "Startup" : "Founder"} · {moment(toProgramWallClock(note.createdat)).format("MMM D, HH:mm")}
                         </p>
                       </div>
                       {targetPath && <ChevronRight size={15} color="#B9C1D4" style={{ flexShrink: 0 }} />}

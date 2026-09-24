@@ -25,7 +25,7 @@ import {
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 import EmptyState from "../components/EmptyState";
 import LoadingState from "../components/LoadingState";
-import { formatDayKey, formatShortDateTime, formatTime } from "../lib/dateTime";
+import { formatDayKey, formatShortDateTime, formatTime, getTodayKey, programNow, programWallClockToDate, toProgramWallClock } from "../lib/dateTime";
 import { DUR, EASE, SPRING, stagger } from "../lib/motion";
 
 const ADMIN_KEY_STORAGE = "decelera.campaigns.adminKey";
@@ -63,20 +63,21 @@ const emptyForm = {
   scheduledFor: "",
 };
 
+// The schedule input is always Mexico time, whatever the device timezone
+// (campaigns are often prepared from Spain): show the stored instant as
+// Mexico wall clock, and convert back to a real instant on save.
 function toDatetimeLocalValue(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const wall = toProgramWallClock(iso);
+  return typeof wall === "string" ? wall.slice(0, 16) : "";
 }
 
 function dayHeading(dayKey) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return "Unscheduled";
   const [y, m, d] = dayKey.split("-").map(Number);
   const date = new Date(y, m - 1, d);
-  const todayKey = formatDayKey(new Date());
-  const tomorrow = new Date();
+  const todayKey = getTodayKey();
+  const tomorrow = programNow();
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (dayKey === todayKey) return "Today";
   if (dayKey === formatDayKey(tomorrow)) return "Tomorrow";
@@ -265,7 +266,7 @@ export default function Campaigns() {
         event_id: form.eventId || null,
         filters,
         mode: form.mode,
-        scheduled_for: form.mode === "schedule" && form.scheduledFor ? new Date(form.scheduledFor).toISOString() : null,
+        scheduled_for: form.mode === "schedule" && form.scheduledFor ? programWallClockToDate(form.scheduledFor)?.toISOString() ?? null : null,
       };
       if (editingId) {
         await updateCampaign(editingId, payload, adminKey);
@@ -551,13 +552,16 @@ export default function Campaigns() {
                 })}
               </div>
               {form.mode === "schedule" && (
-                <input
-                  type="datetime-local"
-                  className="app-input"
-                  style={{ marginTop: 8 }}
-                  value={form.scheduledFor}
-                  onChange={(e) => updateForm({ scheduledFor: e.target.value })}
-                />
+                <>
+                  <input
+                    type="datetime-local"
+                    className="app-input"
+                    style={{ marginTop: 8 }}
+                    value={form.scheduledFor}
+                    onChange={(e) => updateForm({ scheduledFor: e.target.value })}
+                  />
+                  <p style={{ fontSize: 10.5, color: "#9AA3B8", margin: "5px 2px 0" }}>Mexico time (CDMX)</p>
+                </>
               )}
             </div>
 

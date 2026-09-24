@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { API_BASE_URL } from "../lib/apiBaseUrl";
+import { toProgramWallClock } from "../lib/dateTime";
 const CACHE_TTL_MS = 60 * 1000;
 const ONE_ON_ONE_AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || "one-on-ones-audio";
 
@@ -105,27 +106,11 @@ async function api(path, init) {
   return response.json();
 }
 
-// Event / 1:1 times are stored in the DB as naive wall-clock values that
-// represent the program's local (Mexico) schedule, but Prisma serializes them
-// with a trailing "Z". Strip the zone so the whole app treats them as floating
-// wall-clock time: whatever was typed is what every attendee sees, regardless
-// of their device timezone. See src/lib/dateTime.js.
-function toFloatingWallClock(raw) {
-  if (!raw) return raw;
-  const s = String(raw).trim();
-  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
-  const parts = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
-  // Already naive: keep the wall clock verbatim (don't reinterpret via local tz).
-  if (parts && !hasZone) return `${parts[1]}T${parts[2]}:${parts[3] || "00"}`;
-  // Has a zone (Prisma serializes the stored naive value as UTC): read the UTC parts.
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return raw;
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
-    `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`
-  );
-}
+// Event / 1:1 times are real instants in the DB (Prisma serializes them as
+// UTC). Convert them once here to naive Mexico wall-clock strings, so the
+// whole app shows the Mexico schedule regardless of the device timezone.
+// See src/lib/dateTime.js.
+const toFloatingWallClock = toProgramWallClock;
 
 function parseExpertiseTags(raw) {
   if (Array.isArray(raw)) return raw;

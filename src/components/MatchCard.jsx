@@ -4,6 +4,7 @@ import { sendMatchConnect, submitMatchFeedback } from "../api/dataService";
 import { resolvePhotoUrl } from "../lib/photoUrl";
 import { DUR, SPRING, SPRING_GENTLE } from "../lib/motion";
 import { markMatchOpened } from "../lib/matchFlags";
+import { getTodayKey } from "../lib/dateTime";
 
 const RATINGS = [
   { key: "great", emoji: "🔥", label: "Very useful" },
@@ -18,12 +19,14 @@ const TAKEAWAYS = [
   { key: "collab", label: "A possible collaboration" },
 ];
 
+// match_date is a calendar date (serialized as midnight UTC): compare its
+// YYYY-MM-DD against today's date in Mexico, never via the device timezone.
 function dayLabel(raw) {
   if (!raw) return "";
-  const then = new Date(raw);
-  if (Number.isNaN(then.getTime())) return "";
-  const startOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diff = Math.round((startOf(new Date()) - startOf(then)) / 86400000);
+  const thenKey = String(raw).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(thenKey)) return "";
+  const toUtcMs = (key) => Date.UTC(+key.slice(0, 4), +key.slice(5, 7) - 1, +key.slice(8, 10));
+  const diff = Math.round((toUtcMs(getTodayKey()) - toUtcMs(thenKey)) / 86400000);
   if (diff <= 0) return "";
   if (diff === 1) return "yesterday";
   return `${diff} days ago`;

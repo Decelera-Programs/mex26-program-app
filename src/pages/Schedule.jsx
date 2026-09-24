@@ -5,7 +5,10 @@ import moment from "moment";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useUserSchedule } from "../hooks/useUserSchedule";
 import { getHomeDailyContent, listEvents } from "../api/dataService";
-import { formatDayKey as eventDayKeyInTimezone } from "../lib/dateTime";
+import { formatDayKey as eventDayKeyInTimezone, programNow } from "../lib/dateTime";
+
+// Event times are naive Mexico wall clock, so "now" must be too.
+const nowInProgram = () => moment(programNow());
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
@@ -48,7 +51,7 @@ function getThemeByType(type) {
 }
 
 function formatDayPickerLabel(day) {
-  const today = moment().startOf("day");
+  const today = nowInProgram().startOf("day");
   if (day.isSame(today, "day")) return "Today";
   if (day.isSame(today.clone().add(1, "day"), "day")) return "Tomorrow";
   return day.format("ddd, MMM D");
@@ -114,9 +117,9 @@ export default function Schedule() {
   const { events, user, loading } = useUserSchedule();
   const location = useLocation();
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState(moment().startOf("day"));
+  const [selectedDate, setSelectedDate] = useState(nowInProgram().startOf("day"));
   const [masterEvents, setMasterEvents] = useState([]);
-  const [currentTime, setCurrentTime] = useState(() => moment());
+  const [currentTime, setCurrentTime] = useState(() => nowInProgram());
   const [scheduleHeaderTitle, setScheduleHeaderTitle] = useState("Schedule");
   const [attendeeFilter, setAttendeeFilter] = useState("experience_maker");
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
@@ -130,7 +133,7 @@ export default function Schedule() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentTime(moment());
+      setCurrentTime(nowInProgram());
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -186,7 +189,7 @@ export default function Schedule() {
         .map((event) => eventDayKeyInTimezone(event.start_time))
         .filter(Boolean),
     );
-    if (dayKeys.size === 0) return [moment().startOf("day")];
+    if (dayKeys.size === 0) return [nowInProgram().startOf("day")];
     return Array.from(dayKeys)
       .sort((a, b) => moment(a).diff(moment(b)))
       .map((day) => moment(day));
@@ -199,7 +202,7 @@ export default function Schedule() {
       const existing = bootcampDays.find((day) => day.format("YYYY-MM-DD") === selectedDayKey);
       if (existing) return existing.clone();
     }
-    const today = moment().startOf("day");
+    const today = nowInProgram().startOf("day");
     return (bootcampDays.find((day) => day.isSame(today, "day")) || bootcampDays[0]).clone();
   }, [bootcampDays, selectedDayIsAvailable, selectedDayKey]);
 
@@ -400,7 +403,7 @@ export default function Schedule() {
 
   function goToToday() {
     setDayPickerOpen(false);
-    setSelectedDate(moment().startOf("day"));
+    setSelectedDate(nowInProgram().startOf("day"));
   }
 
   function selectScheduleDay(day) {

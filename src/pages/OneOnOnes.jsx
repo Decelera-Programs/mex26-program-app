@@ -15,6 +15,7 @@ import {
   formatShortDateTime,
   formatTime24,
   getTodayKey,
+  programNow,
 } from "../lib/dateTime";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
@@ -65,7 +66,7 @@ export default function OneOnOnes() {
   }, []);
 
   const groupedItems = useMemo(() => {
-    const nowMs = Date.now();
+    const nowMs = programNow().getTime();
     const todayKey = getTodayKey();
 
     const rankByDay = (item) => {
