@@ -1,7 +1,7 @@
 /* Simple service worker for offline support.
    This is intentionally minimal and backend-free. */
 
-const CACHE_NAME = "decelera-mx-pwa-v3";
+const CACHE_NAME = "decelera-mx-pwa-v4";
 
 // Core shell files. Vite will fingerprint JS/CSS, so we cache navigation + static assets.
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/favicon.ico"];
@@ -85,8 +85,11 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "/android-chrome-192x192.png",
-      badge: "/favicon-32x32.png",
+      // Both must be transparent PNGs: `icon` is the large image beside the
+      // text; `badge` is the small status-bar / header glyph, which Android
+      // renders from the alpha channel only — an opaque square shows up blank.
+      icon: "/notification-icon-192.png",
+      badge: "/notification-badge-96.png",
       data: { url: targetUrl },
     }),
   );
