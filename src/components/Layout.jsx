@@ -29,6 +29,7 @@ export default function Layout() {
   const mainRef = useRef(null);
   const scrollPositions = useRef(new Map());
   const lastLocationKey = useRef(location.key);
+  const lastPathname = useRef(location.pathname);
 
   // The page scrolls inside <main>, not the window, so the browser never
   // resets it: opening a profile kept the list's scroll offset. Opening a new
@@ -48,6 +49,14 @@ export default function Layout() {
     const main = mainRef.current;
     if (!main) return;
     lastLocationKey.current = location.key;
+    // Same page, only the query changed (event modal ?event=…, ?notif=…
+    // cleanup): not a new page — leave the scroll exactly where it is.
+    const samePage = lastPathname.current === location.pathname;
+    lastPathname.current = location.pathname;
+    if (samePage) {
+      scrollPositions.current.set(location.key, main.scrollTop);
+      return;
+    }
     const target = navigationType === "POP" ? scrollPositions.current.get(location.key) ?? 0 : 0;
     main.scrollTop = target;
     if (!target) return;
@@ -61,7 +70,7 @@ export default function Layout() {
     };
     frame = requestAnimationFrame(restore);
     return () => cancelAnimationFrame(frame);
-  }, [location.key, navigationType]);
+  }, [location.key, location.pathname, navigationType]);
 
   useEffect(() => { setAttendeesOpen(false); }, [location.pathname]);
 
