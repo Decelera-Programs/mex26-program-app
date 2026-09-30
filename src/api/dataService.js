@@ -519,12 +519,14 @@ export async function signOut() {
 }
 
 export async function getOneOnOneAudio(oneOnOneId) {
-  if (!oneOnOneId) return { active_audio: null, submissions: [] };
+  if (!oneOnOneId) return { active_audio: null, submissions: [], transcript: "", transcript_updated_at: null };
   const data = await api(`/one-on-ones/${encodeURIComponent(oneOnOneId)}/audio`);
   return {
     one_on_one_id: data?.one_on_one_id || oneOnOneId,
     active_audio: data?.active_audio || null,
     submissions: Array.isArray(data?.submissions) ? data.submissions : [],
+    transcript: data?.transcript || "",
+    transcript_updated_at: data?.transcript_updated_at || null,
   };
 }
 

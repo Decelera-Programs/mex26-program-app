@@ -474,7 +474,7 @@ async function rebuildOneOnOneTranscript(oneOnOneId: string) {
   const transcribedSubmissions = await prisma.oneOnOneAudioSubmission.findMany({
     where: {
       one_on_one_id: oneOnOneId,
-      status: "uploaded",
+      status: { in: ["uploaded", "transcribed"] },
       transcript_text: { not: null },
     },
     select: {
@@ -1764,8 +1764,12 @@ const oneOnOneAudioSubmissionSchema = z
     mime_type: z.string().max(255).optional(),
     file_size_bytes: z.number().int().positive().max(250 * 1024 * 1024).optional(),
     duration_sec: z.number().int().positive().max(24 * 60 * 60).optional(),
-    status: z.enum(["uploaded", "failed"]),
+    // "transcribed" here means feedback typed directly (no audio) — stored
+    // the same way an audio submission looks once transcribed, so it merges
+    // into the 1:1's transcript history identically either way.
+    status: z.enum(["uploaded", "failed", "transcribed"]),
     error_message: z.string().max(2000).optional(),
+    transcript_text: z.string().min(1).max(5000).optional(),
   })
   .strict();
 
@@ -1863,6 +1867,10 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
       res.status(400).json({ error: "Failed attempts require error_message" });
       return;
     }
+    if (payload.status === "transcribed" && !payload.transcript_text) {
+      res.status(400).json({ error: "Text feedback requires transcript_text" });
+      return;
+    }
 
     const submissionUserId = me.id?.trim() || "";
     if (!looksLikeUuid(submissionUserId)) {
@@ -1887,6 +1895,8 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
         duration_sec: payload.duration_sec || null,
         status: payload.status,
         error_message: payload.error_message || null,
+        transcript_text: payload.transcript_text || null,
+        transcribed_at: payload.status === "transcribed" ? new Date() : null,
       },
     });
 
@@ -1901,6 +1911,10 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
           active_audio_status: "uploaded",
         },
       });
+    }
+
+    if (payload.status === "uploaded" || payload.status === "transcribed") {
+      await rebuildOneOnOneTranscript(submissionOneOnOneId);
     }
 
     res.status(201).json(created);

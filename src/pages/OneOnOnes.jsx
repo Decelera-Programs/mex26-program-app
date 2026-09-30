@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronRight, Clock, MapPin, Mic, Square, Upload, Users } from "lucide-react";
+import { Check, ChevronRight, Clock, MapPin, Mic, PenLine, Square, Upload, Users } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   getCurrentUser,
@@ -33,6 +33,9 @@ export default function OneOnOnes() {
   const [expandedAudioId, setExpandedAudioId] = useState(null);
   const [audioDataByMeeting, setAudioDataByMeeting] = useState({});
   const [audioUiByMeeting, setAudioUiByMeeting] = useState({});
+  const [noteModeByMeeting, setNoteModeByMeeting] = useState({}); // meetingId -> null | "audio" | "text"
+  const [textByMeeting, setTextByMeeting] = useState({});
+  const [textUiByMeeting, setTextUiByMeeting] = useState({});
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recordingChunksRef = useRef([]);
@@ -313,6 +316,26 @@ export default function OneOnOnes() {
     }
   }
 
+  function setMeetingNoteMode(oneOnOneId, mode) {
+    setNoteModeByMeeting((prev) => ({ ...prev, [oneOnOneId]: mode }));
+  }
+
+  async function sendTextFeedback(oneOnOneId) {
+    const text = (textByMeeting[oneOnOneId] || "").trim();
+    if (!text) return;
+    setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "sending" } }));
+    try {
+      await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
+      const refreshed = await getOneOnOneAudio(oneOnOneId);
+      setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed }));
+      setTextByMeeting((prev) => ({ ...prev, [oneOnOneId]: "" }));
+      setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "success" } }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not send feedback.";
+      setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "error", error: message } }));
+    }
+  }
+
   function formatAudioDuration(seconds) {
     const safe = Number(seconds) || 0;
     const mins = Math.floor(safe / 60);
@@ -380,6 +403,10 @@ export default function OneOnOnes() {
                     const isRecording = audioUi.status === "recording";
                     const isUploading = audioUi.status === "uploading";
                     const activeDuration = audioData?.active_audio?.duration_sec || 0;
+                    const noteMode = noteModeByMeeting[item.id] || null;
+                    const textNote = textByMeeting[item.id] || "";
+                    const textUi = textUiByMeeting[item.id] || {};
+                    const isSendingText = textUi.status === "sending";
 
                     return (
                       <Motion.div
@@ -523,7 +550,7 @@ export default function OneOnOnes() {
                                         Post-session feedback
                                       </p>
                                       <p style={{ fontSize: 10.5, color: "#6E7892", lineHeight: 1.55, marginBottom: 5 }}>
-                                        Record a short voice note covering the following areas. Rate each 1–5 where relevant.
+                                        Record a short voice note or type it covering the following areas. Rate each 1–5 where relevant.
                                       </p>
                                       <ul style={{ fontSize: 10.5, color: "#6E7892", lineHeight: 1.65, paddingLeft: 14, margin: 0 }}>
                                         <li><span style={{ fontWeight: 600, color: "#2D3852" }}>State of development</span> — current product or project maturity</li>
@@ -581,7 +608,81 @@ export default function OneOnOnes() {
                                           )}
                                         </button>
                                       </div>
-                                    ) : (
+                                    ) : noteMode === "text" ? (
+                                      <div>
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", margin: 0 }}>
+                                            Write your feedback
+                                          </p>
+                                          <button
+                                            type="button"
+                                            onClick={() => setMeetingNoteMode(item.id, null)}
+                                            style={{ border: 0, background: "transparent", cursor: "pointer", color: "#6E7892", fontSize: 11, fontWeight: 600, padding: 0 }}
+                                          >
+                                            Change
+                                          </button>
+                                        </div>
+                                        <textarea
+                                          value={textNote}
+                                          onChange={(e) => setTextByMeeting((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                          placeholder="Type your feedback…"
+                                          disabled={isSendingText || textUi.status === "success"}
+                                          style={{
+                                            width: "100%",
+                                            minHeight: 90,
+                                            borderRadius: 12,
+                                            border: "1.5px solid #E4EAF0",
+                                            padding: "10px 12px",
+                                            fontSize: 13,
+                                            color: "#2D3852",
+                                            fontFamily: "Fustat, sans-serif",
+                                            outline: "none",
+                                            background: "#FFFFFF",
+                                            boxSizing: "border-box",
+                                            resize: "vertical",
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => sendTextFeedback(item.id)}
+                                          disabled={!textNote.trim() || isSendingText || textUi.status === "success"}
+                                          style={{
+                                            width: "100%",
+                                            marginTop: 10,
+                                            borderRadius: 12,
+                                            border: "none",
+                                            background: textUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
+                                            color: textUi.status === "success" ? "#6E7892" : "#2D3852",
+                                            padding: "10px 0",
+                                            fontFamily: "Fustat, sans-serif",
+                                            fontWeight: 700,
+                                            fontSize: 13,
+                                            cursor: !textNote.trim() || isSendingText || textUi.status === "success" ? "default" : "pointer",
+                                            opacity: isSendingText ? 0.65 : 1,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: 6,
+                                            transition: "opacity 0.15s",
+                                          }}
+                                        >
+                                          {textUi.status === "success" ? (
+                                            <>
+                                              <Check size={14} /> Sent
+                                            </>
+                                          ) : isSendingText ? (
+                                            "Sending…"
+                                          ) : (
+                                            <>
+                                              <Upload size={14} /> Send
+                                            </>
+                                          )}
+                                        </button>
+                                        {textUi.error ? (
+                                          <p style={{ fontSize: 11, color: "#D9534F", margin: "6px 0 0" }}>{textUi.error}</p>
+                                        ) : null}
+                                      </div>
+                                    ) : noteMode === "audio" ? (
                                       <div className="one-on-one-audio-composer">
                                         <button
                                           type="button"
@@ -613,6 +714,58 @@ export default function OneOnOnes() {
                                           )}
                                         </div>
                                       </div>
+                                    ) : (
+                                      <div>
+                                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", marginBottom: 8 }}>
+                                          What do you want to send?
+                                        </p>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setMeetingNoteMode(item.id, "audio")}
+                                            style={{
+                                              flex: 1,
+                                              borderRadius: 10,
+                                              border: "1.5px solid #E4EAF0",
+                                              background: "transparent",
+                                              color: "#6E7892",
+                                              padding: "10px 0",
+                                              fontFamily: "Fustat, sans-serif",
+                                              fontWeight: 700,
+                                              fontSize: 12,
+                                              cursor: "pointer",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              gap: 6,
+                                            }}
+                                          >
+                                            <Mic className="h-3.5 w-3.5" /> Audio
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setMeetingNoteMode(item.id, "text")}
+                                            style={{
+                                              flex: 1,
+                                              borderRadius: 10,
+                                              border: "1.5px solid #E4EAF0",
+                                              background: "transparent",
+                                              color: "#6E7892",
+                                              padding: "10px 0",
+                                              fontFamily: "Fustat, sans-serif",
+                                              fontWeight: 700,
+                                              fontSize: 12,
+                                              cursor: "pointer",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              gap: 6,
+                                            }}
+                                          >
+                                            <PenLine className="h-3.5 w-3.5" /> Text
+                                          </button>
+                                        </div>
+                                      </div>
                                     )}
 
                                     {audioData?.active_audio?.url ? (
@@ -623,8 +776,21 @@ export default function OneOnOnes() {
                                         </div>
                                         <AudioPlayer src={audioData.active_audio.url} />
                                       </div>
+                                    ) : audioData?.transcript ? (
+                                      <p style={{
+                                        fontSize: 12,
+                                        color: "#4A5573",
+                                        lineHeight: 1.65,
+                                        margin: 0,
+                                        padding: "8px 10px",
+                                        borderRadius: 8,
+                                        background: "#F2F8FA",
+                                        border: "1px solid #E4EAF0",
+                                      }}>
+                                        {audioData.transcript}
+                                      </p>
                                     ) : (
-                                      <p style={{ fontSize: 11, color: "#9AA3B8", margin: 0 }}>No audio uploaded yet.</p>
+                                      <p style={{ fontSize: 11, color: "#9AA3B8", margin: 0 }}>No feedback sent yet.</p>
                                     )}
 
                                     {audioUi.error ? (
