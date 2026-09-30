@@ -61,11 +61,13 @@ export default function TeamNotes() {
   const [audioUi, setAudioUi] = useState({});
   const [textNote, setTextNote] = useState("");
   const [textUi, setTextUi] = useState({});
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
 
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingStartedAtRef = useRef(0);
+  const recordingTickRef = useRef(null);
   const wakeLockRef = useRef(null);
   const draftRestoredRef = useRef(false);
 
@@ -146,7 +148,7 @@ export default function TeamNotes() {
   // only lives in memory.
   useEffect(() => {
     function handleBeforeUnload(event) {
-      if (audioUi.status === "stopped") {
+      if (audioUi.status === "stopped" || audioUi.status === "uploading" || audioUi.status === "error") {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -169,7 +171,8 @@ export default function TeamNotes() {
   // Warn before navigating away inside the app (bottom nav, tapping a
   // note's target) if there's a recorded-but-unsent audio blob — unlike the
   // text draft, it isn't persisted anywhere, so leaving loses it silently.
-  const hasUnsentAudio = audioUi.status === "stopped";
+  const hasUnsentAudio =
+    audioUi.status === "stopped" || audioUi.status === "uploading" || audioUi.status === "error";
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) => hasUnsentAudio && currentLocation.pathname !== nextLocation.pathname,
   );
@@ -206,6 +209,28 @@ export default function TeamNotes() {
   const isRecording = audioUi.status === "recording";
   const isUploading = audioUi.status === "uploading";
 
+  function formatAudioDuration(seconds) {
+    const safe = Number(seconds) || 0;
+    const mins = Math.floor(safe / 60);
+    const secs = safe % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function stopRecordingTick() {
+    if (recordingTickRef.current) {
+      clearInterval(recordingTickRef.current);
+      recordingTickRef.current = null;
+    }
+  }
+
+  function startRecordingTick() {
+    stopRecordingTick();
+    setRecordingElapsed(0);
+    recordingTickRef.current = setInterval(() => {
+      setRecordingElapsed(Math.floor((Date.now() - recordingStartedAtRef.current) / 1000));
+    }, 1000);
+  }
+
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -238,24 +263,29 @@ export default function TeamNotes() {
       recorder.onstop = () => {
         wakeLockRef.current?.release();
         wakeLockRef.current = null;
+        stopRecordingTick();
         const durationSec = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000));
         const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" });
         const file = new File([blob], `team-note-${Date.now()}.webm`, { type: recorder.mimeType || "audio/webm" });
         const previewUrl = URL.createObjectURL(blob);
         setAudioUi((prev) => ({
-          status: "stopped",
+          // Send immediately — no manual tap in between, so a killed app or a
+          // dead battery can't strand a recording that was never sent.
+          status: "uploading",
           blob,
           file,
           previewUrl,
           durationSec,
-          error: prev.interrupted ? "The microphone was interrupted. You can still send the partial recording." : "",
+          error: prev.interrupted ? "The microphone was interrupted. Sending the partial recording." : "",
         }));
         stream.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
+        uploadNote(file, durationSec);
       };
       // Flush data every second instead of only at stop() — if recording
       // gets killed abruptly, whatever was already flushed is still usable.
       recorder.start(1000);
+      startRecordingTick();
       setAudioUi({ status: "recording", error: "" });
     } catch (error) {
       setAudioUi({ status: "error", error: error instanceof Error ? error.message : "Microphone not available." });
@@ -268,25 +298,24 @@ export default function TeamNotes() {
     }
   }
 
-  async function uploadNote() {
-    if (!selectedTarget || !audioUi.file) return;
+  async function uploadNote(file, durationSec) {
+    if (!selectedTarget || !file) return;
     setAudioUi((prev) => ({ ...prev, status: "uploading", error: "" }));
     const targetId = selectedTarget.id;
     try {
-      const uploaded = await uploadTeamAudioToStorage(targetType, targetId, audioUi.file);
+      const uploaded = await uploadTeamAudioToStorage(targetType, targetId, file);
       await submitTeamAudioNote({
         target_type: targetType,
         ...(targetType === "startup" ? { startup_id: targetId } : { founder_id: targetId }),
         storage_path: uploaded.storagePath,
         public_url: uploaded.publicUrl,
-        mime_type: audioUi.file.type || "audio/webm",
-        file_size_bytes: audioUi.file.size,
-        duration_sec: audioUi.durationSec,
+        mime_type: file.type || "audio/webm",
+        file_size_bytes: file.size,
+        duration_sec: durationSec,
         status: "uploaded",
       });
-      const refreshed = await listMyTeamNotes();
-      setNotes(refreshed);
-      setAudioUi({ status: "success" });
+      setAudioUi((prev) => ({ ...prev, status: "success", error: "" }));
+      listMyTeamNotes().then(setNotes).catch(() => {});
       setTimeout(() => {
         setComposerOpen(false);
         setSelectedTarget(null);
@@ -316,9 +345,8 @@ export default function TeamNotes() {
         status: "transcribed",
         transcript_text: textNote.trim(),
       });
-      const refreshed = await listMyTeamNotes();
-      setNotes(refreshed);
       setTextUi({ status: "success" });
+      listMyTeamNotes().then(setNotes).catch(() => {});
       setTimeout(() => {
         setComposerOpen(false);
         setSelectedTarget(null);
@@ -696,51 +724,67 @@ export default function TeamNotes() {
                       {audioUi.previewUrl ? (
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-                            <Check size={12} color="#0A859B" />
-                            <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0A859B" }}>
-                              {audioUi.status === "success" ? "Sent" : "Audio recorded"}
+                            {audioUi.status === "success" ? <Check size={12} color="#0A859B" /> : null}
+                            <span style={{ fontSize: 11.5, fontWeight: 600, color: audioUi.status === "error" ? "#D9534F" : "#0A859B" }}>
+                              {audioUi.status === "success"
+                                ? "Sent"
+                                : audioUi.status === "error"
+                                  ? "Upload failed"
+                                  : "Sending…"}
                             </span>
                           </div>
                           <AudioPlayer src={audioUi.previewUrl} />
-                          <button
-                            type="button"
-                            onClick={uploadNote}
-                            disabled={isUploading || audioUi.status === "success"}
-                            style={{
-                              width: "100%",
-                              marginTop: 10,
-                              borderRadius: 12,
-                              border: "none",
-                              background: audioUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
-                              color: audioUi.status === "success" ? "#6E7892" : "#2D3852",
-                              padding: "10px 0",
-                              fontFamily: "Fustat, sans-serif",
-                              fontWeight: 700,
-                              fontSize: 13,
-                              cursor: isUploading || audioUi.status === "success" ? "default" : "pointer",
-                              opacity: isUploading ? 0.65 : 1,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              gap: 6,
-                              transition: "opacity 0.15s",
-                            }}
-                          >
-                            {audioUi.status === "success" ? (
-                              <>
-                                <Check size={14} /> Sent
-                              </>
-                            ) : isUploading ? (
-                              "Sending…"
-                            ) : (
-                              <>
-                                <Upload size={14} /> Send
-                              </>
-                            )}
-                          </button>
+                          {audioUi.status === "error" ? (
+                            <button
+                              type="button"
+                              onClick={() => uploadNote(audioUi.file, audioUi.durationSec)}
+                              disabled={isUploading}
+                              style={{
+                                width: "100%",
+                                marginTop: 10,
+                                borderRadius: 12,
+                                border: "none",
+                                background: "#1FD0EF",
+                                color: "#2D3852",
+                                padding: "10px 0",
+                                fontFamily: "Fustat, sans-serif",
+                                fontWeight: 700,
+                                fontSize: 13,
+                                cursor: isUploading ? "default" : "pointer",
+                                opacity: isUploading ? 0.65 : 1,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6,
+                                transition: "opacity 0.15s",
+                              }}
+                            >
+                              <Upload size={14} /> Retry send
+                            </button>
+                          ) : null}
                         </div>
                       ) : (
                         <div className="one-on-one-audio-composer">
+                          <div className="one-on-one-audio-track">
+                            {isRecording ? (
+                              <>
+                                <div className="one-on-one-audio-wave">
+                                  {Array.from({ length: 18 }).map((_, waveIdx) => (
+                                    <Motion.span
+                                      key={waveIdx}
+                                      className="one-on-one-audio-wave-bar"
+                                      animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
+                                      transition={{ duration: 1.1, repeat: Number.POSITIVE_INFINITY, delay: waveIdx * 0.04 }}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="one-on-one-audio-timer">{formatAudioDuration(recordingElapsed)}</span>
+                              </>
+                            ) : (
+                              <p className="one-on-one-audio-caption">Tap mic to record</p>
+                            )}
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => isRecording ? stopRecording() : startRecording()}
@@ -748,22 +792,6 @@ export default function TeamNotes() {
                           >
                             {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                           </button>
-                          <div className="one-on-one-audio-track">
-                            {isRecording ? (
-                              <div className="one-on-one-audio-wave">
-                                {Array.from({ length: 18 }).map((_, waveIdx) => (
-                                  <Motion.span
-                                    key={waveIdx}
-                                    className="one-on-one-audio-wave-bar"
-                                    animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
-                                    transition={{ duration: 1.1, repeat: Number.POSITIVE_INFINITY, delay: waveIdx * 0.04 }}
-                                  />
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="one-on-one-audio-caption">Tap mic to record</p>
-                            )}
-                          </div>
                         </div>
                       )}
                       {isRecording && audioUi.wakeLockWarning && (

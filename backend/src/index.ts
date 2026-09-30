@@ -499,7 +499,25 @@ async function rebuildOneOnOneTranscript(oneOnOneId: string) {
   return transcript;
 }
 
+// Guards against overlap between the 5-minute interval and the fire-and-forget
+// trigger right after an upload — without it, several EMs sending audio close
+// together would each kick off their own pass over the same pending rows,
+// double-billing Whisper and hammering OpenAI concurrently.
+let oneOnOneTranscriptionRunning = false;
+
 async function runOneOnOneTranscriptionJob(limit = 10) {
+  if (oneOnOneTranscriptionRunning) {
+    return { processed: 0, succeeded: 0, failed: 0, updated_one_on_ones: 0, skipped: "already_running" as const };
+  }
+  oneOnOneTranscriptionRunning = true;
+  try {
+    return await runOneOnOneTranscriptionJobInner(limit);
+  } finally {
+    oneOnOneTranscriptionRunning = false;
+  }
+}
+
+async function runOneOnOneTranscriptionJobInner(limit: number) {
   const pending = await prisma.oneOnOneAudioSubmission.findMany({
     where: {
       status: "uploaded",
@@ -574,7 +592,21 @@ async function runOneOnOneTranscriptionJob(limit = 10) {
     updated_one_on_ones: impactedOneOnOnes.size,
   };
 }
+let teamNoteTranscriptionRunning = false;
+
 async function runTeamNoteTranscriptionJob(limit = 10) {
+  if (teamNoteTranscriptionRunning) {
+    return { processed: 0, succeeded: 0, failed: 0, skipped: "already_running" as const };
+  }
+  teamNoteTranscriptionRunning = true;
+  try {
+    return await runTeamNoteTranscriptionJobInner(limit);
+  } finally {
+    teamNoteTranscriptionRunning = false;
+  }
+}
+
+async function runTeamNoteTranscriptionJobInner(limit: number) {
   const pending = await prisma.teamAudioNote.findMany({
     where: {
       status: "uploaded",
@@ -1918,6 +1950,12 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
     }
 
     res.status(201).json(created);
+
+    // Transcribe right away instead of waiting for the next 5-minute tick —
+    // fire-and-forget so the upload response isn't held up by the Whisper call.
+    if (payload.status === "uploaded") {
+      runOneOnOneTranscriptionJob(5).catch(() => {});
+    }
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save one-on-one audio" });
   }
@@ -2111,6 +2149,12 @@ app.post("/team-notes", async (req, res) => {
     });
 
     res.status(201).json(created);
+
+    // Transcribe right away instead of waiting for the next 5-minute tick —
+    // fire-and-forget so the upload response isn't held up by the Whisper call.
+    if (payload.status === "uploaded") {
+      runTeamNoteTranscriptionJob(5).catch(() => {});
+    }
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save team note" });
   }

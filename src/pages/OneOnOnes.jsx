@@ -51,11 +51,13 @@ export default function OneOnOnes() {
   const [kpiPrompt, setKpiPrompt] = useState(null); // { oneOnOneId, submissionId } | null
   const [kpiValues, setKpiValues] = useState({});
   const [kpiUi, setKpiUi] = useState({});
+  const [recordingElapsedByMeeting, setRecordingElapsedByMeeting] = useState({});
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const recordingStartedAtRef = useRef(0);
   const recordingMeetingIdRef = useRef("");
+  const recordingTickRef = useRef(null);
   const wakeLockRef = useRef(null);
 
   useEffect(() => {
@@ -123,7 +125,9 @@ export default function OneOnOnes() {
   // people lose feedback they meant to send.
   const hasUnsentFeedback = useMemo(
     () =>
-      Object.values(audioUiByMeeting).some((ui) => ui?.status === "stopped") ||
+      Object.values(audioUiByMeeting).some((ui) =>
+        ui?.status === "stopped" || ui?.status === "uploading" || ui?.status === "error",
+      ) ||
       Object.values(textByMeeting).some((text) => (text || "").trim()) ||
       Boolean(kpiPrompt),
     [audioUiByMeeting, textByMeeting, kpiPrompt],
@@ -225,6 +229,24 @@ export default function OneOnOnes() {
     }
   }
 
+  function stopRecordingTick() {
+    if (recordingTickRef.current) {
+      clearInterval(recordingTickRef.current);
+      recordingTickRef.current = null;
+    }
+  }
+
+  function startRecordingTick(oneOnOneId) {
+    stopRecordingTick();
+    setRecordingElapsedByMeeting((prev) => ({ ...prev, [oneOnOneId]: 0 }));
+    recordingTickRef.current = setInterval(() => {
+      setRecordingElapsedByMeeting((prev) => ({
+        ...prev,
+        [oneOnOneId]: Math.floor((Date.now() - recordingStartedAtRef.current) / 1000),
+      }));
+    }, 1000);
+  }
+
   async function startRecording(oneOnOneId) {
     if (!canSubmitAudio) return;
     if (recordingMeetingIdRef.current && recordingMeetingIdRef.current !== oneOnOneId) {
@@ -278,6 +300,7 @@ export default function OneOnOnes() {
       recorder.onerror = () => {
         wakeLockRef.current?.release();
         wakeLockRef.current = null;
+        stopRecordingTick();
         recordingMeetingIdRef.current = "";
         stream.getTracks().forEach((t) => t.stop());
         mediaStreamRef.current = null;
@@ -294,6 +317,7 @@ export default function OneOnOnes() {
       recorder.onstop = () => {
         wakeLockRef.current?.release();
         wakeLockRef.current = null;
+        stopRecordingTick();
         const durationSec = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000));
         const blob = new Blob(recordingChunksRef.current, {
           type: recorder.mimeType || "audio/webm",
@@ -308,11 +332,11 @@ export default function OneOnOnes() {
             ...prev,
             [oneOnOneId]: {
               ...prev[oneOnOneId],
-              status: "stopped",
+              // Send immediately — no manual tap in between, so a killed app
+              // or a dead battery can't strand a recording that was never sent.
+              status: "uploading",
               interrupted: false,
-              error: wasInterrupted
-                ? "The microphone was interrupted. You can still upload the partial recording."
-                : "",
+              error: wasInterrupted ? "The microphone was interrupted. Sending the partial recording." : "",
               blob,
               file,
               previewUrl,
@@ -323,10 +347,12 @@ export default function OneOnOnes() {
         recordingMeetingIdRef.current = "";
         stream.getTracks().forEach((track) => track.stop());
         mediaStreamRef.current = null;
+        uploadRecording(oneOnOneId, file, durationSec);
       };
 
       // Timesliced: collect a chunk every second so interruptions don't lose all data
       recorder.start(1000);
+      startRecordingTick(oneOnOneId);
       setAudioUiByMeeting((prev) => ({
         ...prev,
         [oneOnOneId]: {
@@ -354,28 +380,24 @@ export default function OneOnOnes() {
     }
   }
 
-  async function uploadRecording(oneOnOneId) {
-    if (!canSubmitAudio) return;
-    const ui = audioUiByMeeting[oneOnOneId];
-    if (!ui?.file) return;
+  async function uploadRecording(oneOnOneId, file, durationSec) {
+    if (!canSubmitAudio || !file) return;
     setAudioUiByMeeting((prev) => ({
       ...prev,
       [oneOnOneId]: { ...prev[oneOnOneId], status: "uploading", error: "" },
     }));
     try {
-      const uploaded = await uploadOneOnOneAudioToStorage(oneOnOneId, ui.file);
+      const uploaded = await uploadOneOnOneAudioToStorage(oneOnOneId, file);
       if (!uploaded.publicUrl) throw new Error("Storage did not return a public URL.");
-      if (!ui.file.size) throw new Error("Recorded audio file is empty.");
+      if (!file.size) throw new Error("Recorded audio file is empty.");
       const created = await registerOneOnOneAudioSubmission(oneOnOneId, {
         storage_path: uploaded.storagePath,
         public_url: uploaded.publicUrl,
-        mime_type: ui.file.type || "audio/webm",
-        file_size_bytes: ui.file.size,
-        duration_sec: ui.durationSec,
+        mime_type: file.type || "audio/webm",
+        file_size_bytes: file.size,
+        duration_sec: durationSec,
         status: "uploaded",
       });
-      const refreshed = await getOneOnOneAudio(oneOnOneId);
-      setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed }));
       setAudioUiByMeeting((prev) => ({
         ...prev,
         [oneOnOneId]: { ...prev[oneOnOneId], status: "success", error: "" },
@@ -383,6 +405,11 @@ export default function OneOnOnes() {
       setKpiValues(DEFAULT_KPI_VALUES);
       setKpiUi({});
       setKpiPrompt({ oneOnOneId, submissionId: created.id });
+      // Refresh in the background — it re-signs every past attempt's playback
+      // URL, which only matters once they reopen this card, not for "Sent".
+      getOneOnOneAudio(oneOnOneId)
+        .then((refreshed) => setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed })))
+        .catch(() => {});
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not upload audio.";
       await registerOneOnOneAudioSubmission(oneOnOneId, {
@@ -398,7 +425,7 @@ export default function OneOnOnes() {
         [oneOnOneId]: {
           ...prev[oneOnOneId],
           status: "error",
-          error: "Upload failed. Your recording is saved — tap the send button to try again.",
+          error: "Upload failed. Your recording is saved — tap \"Retry send\" to try again.",
         },
       }));
     }
@@ -414,13 +441,14 @@ export default function OneOnOnes() {
     setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "sending" } }));
     try {
       const created = await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
-      const refreshed = await getOneOnOneAudio(oneOnOneId);
-      setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed }));
       setTextByMeeting((prev) => ({ ...prev, [oneOnOneId]: "" }));
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "success" } }));
       setKpiValues(DEFAULT_KPI_VALUES);
       setKpiUi({});
       setKpiPrompt({ oneOnOneId, submissionId: created.id });
+      getOneOnOneAudio(oneOnOneId)
+        .then((refreshed) => setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed })))
+        .catch(() => {});
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not send feedback.";
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "error", error: message } }));
@@ -516,7 +544,11 @@ export default function OneOnOnes() {
                     const textNote = textByMeeting[item.id] || "";
                     const textUi = textUiByMeeting[item.id] || {};
                     const isSendingText = textUi.status === "sending";
-                    const hasUnsentFeedback = audioUi.status === "stopped" || Boolean(textNote.trim());
+                    const hasUnsentFeedback =
+                      audioUi.status === "stopped" ||
+                      audioUi.status === "uploading" ||
+                      audioUi.status === "error" ||
+                      Boolean(textNote.trim());
 
                     return (
                       <Motion.div
@@ -683,48 +715,46 @@ export default function OneOnOnes() {
                                     {audioUi.previewUrl ? (
                                       <div>
                                         <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-                                          <Check size={12} color="#0A859B" />
-                                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "#0A859B" }}>
-                                            {audioUi.status === "success" ? "Sent" : "Audio recorded"}
+                                          {audioUi.status === "success" ? (
+                                            <Check size={12} color="#0A859B" />
+                                          ) : null}
+                                          <span style={{ fontSize: 11.5, fontWeight: 600, color: audioUi.status === "error" ? "#D9534F" : "#0A859B" }}>
+                                            {audioUi.status === "success"
+                                              ? "Sent"
+                                              : audioUi.status === "error"
+                                                ? "Upload failed"
+                                                : "Sending…"}
                                           </span>
                                         </div>
                                         <AudioPlayer src={audioUi.previewUrl} />
-                                        <button
-                                          type="button"
-                                          onClick={() => uploadRecording(item.id)}
-                                          disabled={!canSubmitAudio || isUploading || audioUi.status === "success"}
-                                          style={{
-                                            width: "100%",
-                                            marginTop: 10,
-                                            borderRadius: 12,
-                                            border: "none",
-                                            background: audioUi.status === "success" ? "#EEF2F5" : "#1FD0EF",
-                                            color: audioUi.status === "success" ? "#6E7892" : "#2D3852",
-                                            padding: "10px 0",
-                                            fontFamily: "Fustat, sans-serif",
-                                            fontWeight: 700,
-                                            fontSize: 13,
-                                            cursor: !canSubmitAudio || isUploading || audioUi.status === "success" ? "default" : "pointer",
-                                            opacity: isUploading ? 0.65 : 1,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            gap: 6,
-                                            transition: "opacity 0.15s",
-                                          }}
-                                        >
-                                          {audioUi.status === "success" ? (
-                                            <>
-                                              <Check size={14} /> Sent
-                                            </>
-                                          ) : isUploading ? (
-                                            "Sending…"
-                                          ) : (
-                                            <>
-                                              <Upload size={14} /> Send
-                                            </>
-                                          )}
-                                        </button>
+                                        {audioUi.status === "error" ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => uploadRecording(item.id, audioUi.file, audioUi.durationSec)}
+                                            disabled={!canSubmitAudio || isUploading}
+                                            style={{
+                                              width: "100%",
+                                              marginTop: 10,
+                                              borderRadius: 12,
+                                              border: "none",
+                                              background: "#1FD0EF",
+                                              color: "#2D3852",
+                                              padding: "10px 0",
+                                              fontFamily: "Fustat, sans-serif",
+                                              fontWeight: 700,
+                                              fontSize: 13,
+                                              cursor: !canSubmitAudio || isUploading ? "default" : "pointer",
+                                              opacity: isUploading ? 0.65 : 1,
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              gap: 6,
+                                              transition: "opacity 0.15s",
+                                            }}
+                                          >
+                                            <Upload size={14} /> Retry send
+                                          </button>
+                                        ) : null}
                                       </div>
                                     ) : noteMode === "text" ? (
                                       <div>
@@ -803,6 +833,32 @@ export default function OneOnOnes() {
                                     ) : noteMode === "audio" ? (
                                       <div>
                                         <div className="one-on-one-audio-composer">
+                                          <div className="one-on-one-audio-track">
+                                            {isRecording ? (
+                                              <>
+                                                <div className="one-on-one-audio-wave">
+                                                  {Array.from({ length: 18 }).map((_, waveIndex) => (
+                                                    <Motion.span
+                                                      key={waveIndex}
+                                                      className="one-on-one-audio-wave-bar"
+                                                      animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
+                                                      transition={{
+                                                        duration: 1.1,
+                                                        repeat: Number.POSITIVE_INFINITY,
+                                                        delay: waveIndex * 0.04,
+                                                      }}
+                                                    />
+                                                  ))}
+                                                </div>
+                                                <span className="one-on-one-audio-timer">
+                                                  {formatAudioDuration(recordingElapsedByMeeting[item.id] || 0)}
+                                                </span>
+                                              </>
+                                            ) : (
+                                              <p className="one-on-one-audio-caption">Tap the mic to record</p>
+                                            )}
+                                          </div>
+
                                           <button
                                             type="button"
                                             onClick={() => (isRecording ? stopRecording(item.id) : startRecording(item.id))}
@@ -811,27 +867,6 @@ export default function OneOnOnes() {
                                           >
                                             {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                           </button>
-
-                                          <div className="one-on-one-audio-track">
-                                            {isRecording ? (
-                                              <div className="one-on-one-audio-wave">
-                                                {Array.from({ length: 18 }).map((_, waveIndex) => (
-                                                  <Motion.span
-                                                    key={waveIndex}
-                                                    className="one-on-one-audio-wave-bar"
-                                                    animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
-                                                    transition={{
-                                                      duration: 1.1,
-                                                      repeat: Number.POSITIVE_INFINITY,
-                                                      delay: waveIndex * 0.04,
-                                                    }}
-                                                  />
-                                                ))}
-                                              </div>
-                                            ) : (
-                                              <p className="one-on-one-audio-caption">Tap the mic to record</p>
-                                            )}
-                                          </div>
                                         </div>
                                         {isRecording && audioUi.wakeLockWarning ? (
                                           <p style={{ fontSize: 10.5, color: "#B8862B", background: "#FFF4E5", borderRadius: 8, padding: "6px 8px", marginTop: 8 }}>

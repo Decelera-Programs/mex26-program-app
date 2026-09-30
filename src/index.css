@@ -303,7 +303,8 @@
 
   .one-on-one-audio-composer {
     display: grid;
-    grid-template-columns: 2.2rem minmax(0, 1fr);
+    /* Mic on the right — most people hold the phone in their right hand. */
+    grid-template-columns: minmax(0, 1fr) 2.2rem;
     align-items: center;
     gap: 0.55rem;
   }
@@ -353,7 +354,8 @@
   }
 
   .one-on-one-audio-wave {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     height: 1rem;
     display: flex;
     align-items: center;
@@ -373,6 +375,18 @@
     font-size: 0.68rem;
     color: #6E7892;
     font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  /* Recording timer: sits at the trailing edge of the track, right before the
+     mic button, like a voice-memo app — tabular so the digits don't jitter. */
+  .one-on-one-audio-timer {
+    flex: 0 0 auto;
+    margin-left: 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #0A859B;
     letter-spacing: 0.01em;
   }
 
