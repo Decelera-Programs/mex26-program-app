@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker, useNavigate } from "react-router-dom";
 import moment from "moment";
 import { toProgramWallClock } from "../lib/dateTime";
 import { Building2, Check, ChevronDown, ChevronRight, ChevronUp, Lock, Mic, PenLine, Square, Upload, User, X } from "lucide-react";
@@ -115,6 +115,46 @@ export default function TeamNotes() {
     return () => { cancelled = true; };
   }, []);
 
+  // Wake Lock is released by the browser as soon as the tab loses visibility,
+  // even briefly (a notification, switching apps) — re-request it as soon as
+  // we're back, or the screen can lock mid-recording without any signal.
+  const acquireWakeLock = useCallback(async () => {
+    if (!("wakeLock" in navigator)) {
+      setAudioUi((prev) => ({ ...prev, wakeLockWarning: true }));
+      return;
+    }
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      setAudioUi((prev) => ({ ...prev, wakeLockWarning: false }));
+    } catch {
+      setAudioUi((prev) => ({ ...prev, wakeLockWarning: true }));
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible" && mediaRecorderRef.current?.state === "recording") {
+        acquireWakeLock();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [acquireWakeLock]);
+
+  // Warn before closing/refreshing the tab if there's a recorded-but-unsent
+  // audio note — the text draft is already persisted, but the audio blob
+  // only lives in memory.
+  useEffect(() => {
+    function handleBeforeUnload(event) {
+      if (audioUi.status === "stopped") {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [audioUi.status]);
+
   // Keep the text draft in localStorage in sync so it survives the tab
   // getting killed (switching apps on mobile) before it's sent.
   useEffect(() => {
@@ -125,6 +165,14 @@ export default function TeamNotes() {
       saveTextDraft(null);
     }
   }, [noteMode, selectedTarget, targetType, textNote]);
+
+  // Warn before navigating away inside the app (bottom nav, tapping a
+  // note's target) if there's a recorded-but-unsent audio blob — unlike the
+  // text draft, it isn't persisted anywhere, so leaving loses it silently.
+  const hasUnsentAudio = audioUi.status === "stopped";
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => hasUnsentAudio && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   const filteredTargets = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -170,13 +218,7 @@ export default function TeamNotes() {
 
       // Prevent the screen from locking during recording — the single
       // biggest cause of an accidentally-cut-off recording.
-      try {
-        if (navigator.wakeLock) {
-          wakeLockRef.current = await navigator.wakeLock.request("screen");
-        }
-      } catch {
-        // best-effort — recording still works without it
-      }
+      await acquireWakeLock();
 
       // Detect mic interruption (incoming call, OS reclaiming the mic,
       // the tab getting backgrounded/suspended, etc.) and stop cleanly
@@ -724,6 +766,11 @@ export default function TeamNotes() {
                           </div>
                         </div>
                       )}
+                      {isRecording && audioUi.wakeLockWarning && (
+                        <p style={{ fontSize: 10.5, color: "#B8862B", background: "#FFF4E5", borderRadius: 8, padding: "6px 8px", marginTop: 8 }}>
+                          Keep the screen on while recording — this device can&apos;t hold it awake automatically.
+                        </p>
+                      )}
                       {audioUi.error && (
                         <p className="text-[11px] mt-1" style={{ color: "#D9534F" }}>{audioUi.error}</p>
                       )}
@@ -876,6 +923,77 @@ export default function TeamNotes() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {blocker.state === "blocked" ? (
+          <Motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(45,56,82,0.45)",
+              zIndex: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <Motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ background: "#FFFFFF", borderRadius: 20, padding: 20, width: "100%", maxWidth: 320 }}
+            >
+              <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 17, color: "#2D3852", margin: "0 0 6px" }}>
+                Leave without sending?
+              </p>
+              <p style={{ fontSize: 12.5, color: "#6E7892", lineHeight: 1.5, margin: "0 0 16px" }}>
+                You have a recorded note that hasn&apos;t been sent yet. If you leave now, it will be lost.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => blocker.reset()}
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    border: "1.5px solid #E4EAF0",
+                    background: "transparent",
+                    color: "#2D3852",
+                    padding: "10px 0",
+                    fontFamily: "Fustat, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Stay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => blocker.proceed()}
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#1FD0EF",
+                    color: "#2D3852",
+                    padding: "10px 0",
+                    fontFamily: "Fustat, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Leave anyway
+                </button>
+              </div>
+            </Motion.div>
+          </Motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

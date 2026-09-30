@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker, useNavigate } from "react-router-dom";
 import { Check, ChevronRight, Clock, MapPin, Mic, PenLine, Square, Upload, Users } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,6 +7,7 @@ import {
   getOneOnOneAudio,
   listMyOneOnOnes,
   registerOneOnOneAudioSubmission,
+  submitOneOnOneTeamKpis,
   uploadOneOnOneAudioToStorage,
 } from "../api/dataService";
 import {
@@ -24,6 +25,17 @@ import EmptyState from "../components/EmptyState";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import { SPRING, stagger } from "../lib/motion";
 
+const TEAM_KPIS = [
+  { key: "trust_conflict_resolution", label: "Trust & Conflict Resolution" },
+  { key: "clear_operational_roles", label: "Clear Operational Roles" },
+  { key: "complementary_personality", label: "Complementary Personality" },
+  { key: "vision_alignment", label: "Vision Alignment" },
+];
+
+// Sliders need a starting position — default at the midpoint rather than
+// leaving the field ambiguous between "unanswered" and "rated a 5".
+const DEFAULT_KPI_VALUES = Object.fromEntries(TEAM_KPIS.map((kpi) => [kpi.key, 5]));
+
 export default function OneOnOnes() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -36,6 +48,9 @@ export default function OneOnOnes() {
   const [noteModeByMeeting, setNoteModeByMeeting] = useState({}); // meetingId -> null | "audio" | "text"
   const [textByMeeting, setTextByMeeting] = useState({});
   const [textUiByMeeting, setTextUiByMeeting] = useState({});
+  const [kpiPrompt, setKpiPrompt] = useState(null); // { oneOnOneId, submissionId } | null
+  const [kpiValues, setKpiValues] = useState({});
+  const [kpiUi, setKpiUi] = useState({});
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recordingChunksRef = useRef([]);
@@ -67,6 +82,80 @@ export default function OneOnOnes() {
       cancelled = true;
     };
   }, []);
+
+  // Wake Lock is released by the browser as soon as the tab loses visibility,
+  // even briefly (a notification, switching apps) — re-request it as soon as
+  // we're back, or the screen can lock mid-recording without any signal.
+  const acquireWakeLock = useCallback(async (oneOnOneId) => {
+    if (!("wakeLock" in navigator)) {
+      setAudioUiByMeeting((prev) => ({
+        ...prev,
+        [oneOnOneId]: { ...prev[oneOnOneId], wakeLockWarning: true },
+      }));
+      return;
+    }
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      setAudioUiByMeeting((prev) => ({
+        ...prev,
+        [oneOnOneId]: { ...prev[oneOnOneId], wakeLockWarning: false },
+      }));
+    } catch {
+      setAudioUiByMeeting((prev) => ({
+        ...prev,
+        [oneOnOneId]: { ...prev[oneOnOneId], wakeLockWarning: true },
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible" && recordingMeetingIdRef.current) {
+        acquireWakeLock(recordingMeetingIdRef.current);
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [acquireWakeLock]);
+
+  // Whether any meeting has a recorded-but-unsent audio, a typed-but-unsent
+  // text note, or a mandatory team rating still open — the most common ways
+  // people lose feedback they meant to send.
+  const hasUnsentFeedback = useMemo(
+    () =>
+      Object.values(audioUiByMeeting).some((ui) => ui?.status === "stopped") ||
+      Object.values(textByMeeting).some((text) => (text || "").trim()) ||
+      Boolean(kpiPrompt),
+    [audioUiByMeeting, textByMeeting, kpiPrompt],
+  );
+
+  // Warn before closing/refreshing the tab.
+  useEffect(() => {
+    function handleBeforeUnload(event) {
+      if (hasUnsentFeedback) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsentFeedback]);
+
+  // Warn before navigating away inside the app (bottom nav, tapping a
+  // meeting's target) — this is how people leave the page most often,
+  // and it bypasses beforeunload entirely since the tab never unloads.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => hasUnsentFeedback && currentLocation.pathname !== nextLocation.pathname,
+  );
+
+  // The KPI prompt is itself a mandatory blocking step — don't stack the
+  // generic "leave without sending?" dialog on top of it, just cancel the
+  // navigation attempt silently and let the KPI modal keep the floor.
+  useEffect(() => {
+    if (blocker.state === "blocked" && kpiPrompt) {
+      blocker.reset();
+    }
+  }, [blocker, kpiPrompt]);
 
   const groupedItems = useMemo(() => {
     const nowMs = programNow().getTime();
@@ -162,11 +251,7 @@ export default function OneOnOnes() {
       mediaRecorderRef.current = recorder;
 
       // Prevent screen from locking during recording
-      try {
-        if (navigator.wakeLock) {
-          wakeLockRef.current = await navigator.wakeLock.request("screen");
-        }
-      } catch (_) {}
+      await acquireWakeLock(oneOnOneId);
 
       // Detect microphone interruption (e.g. incoming call, Siri, another app)
       stream.getTracks().forEach((track) => {
@@ -281,7 +366,7 @@ export default function OneOnOnes() {
       const uploaded = await uploadOneOnOneAudioToStorage(oneOnOneId, ui.file);
       if (!uploaded.publicUrl) throw new Error("Storage did not return a public URL.");
       if (!ui.file.size) throw new Error("Recorded audio file is empty.");
-      await registerOneOnOneAudioSubmission(oneOnOneId, {
+      const created = await registerOneOnOneAudioSubmission(oneOnOneId, {
         storage_path: uploaded.storagePath,
         public_url: uploaded.publicUrl,
         mime_type: ui.file.type || "audio/webm",
@@ -295,6 +380,9 @@ export default function OneOnOnes() {
         ...prev,
         [oneOnOneId]: { ...prev[oneOnOneId], status: "success", error: "" },
       }));
+      setKpiValues(DEFAULT_KPI_VALUES);
+      setKpiUi({});
+      setKpiPrompt({ oneOnOneId, submissionId: created.id });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not upload audio.";
       await registerOneOnOneAudioSubmission(oneOnOneId, {
@@ -325,14 +413,35 @@ export default function OneOnOnes() {
     if (!text) return;
     setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "sending" } }));
     try {
-      await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
+      const created = await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
       const refreshed = await getOneOnOneAudio(oneOnOneId);
       setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed }));
       setTextByMeeting((prev) => ({ ...prev, [oneOnOneId]: "" }));
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "success" } }));
+      setKpiValues(DEFAULT_KPI_VALUES);
+      setKpiUi({});
+      setKpiPrompt({ oneOnOneId, submissionId: created.id });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not send feedback.";
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "error", error: message } }));
+    }
+  }
+
+  function setKpiValue(kpiKey, value) {
+    setKpiValues((prev) => ({ ...prev, [kpiKey]: value }));
+  }
+
+  async function submitKpiRating() {
+    if (!kpiPrompt) return;
+    setKpiUi({ status: "sending" });
+    try {
+      await submitOneOnOneTeamKpis(kpiPrompt.oneOnOneId, kpiPrompt.submissionId, { ...DEFAULT_KPI_VALUES, ...kpiValues });
+      setKpiPrompt(null);
+      setKpiValues({});
+      setKpiUi({});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save the rating.";
+      setKpiUi({ status: "error", error: message });
     }
   }
 
@@ -407,6 +516,7 @@ export default function OneOnOnes() {
                     const textNote = textByMeeting[item.id] || "";
                     const textUi = textUiByMeeting[item.id] || {};
                     const isSendingText = textUi.status === "sending";
+                    const hasUnsentFeedback = audioUi.status === "stopped" || Boolean(textNote.trim());
 
                     return (
                       <Motion.div
@@ -523,9 +633,17 @@ export default function OneOnOnes() {
                         {canSubmitAudio ? (
                           <Motion.div layout className="mx-[10px] mb-[10px] rounded-[12px] px-[12px] py-[9px]" style={{ background: "#F2F8FA" }}>
                             <div className="one-on-one-audio-header">
-                              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#0A859B" }}>
-                                Send Post Session Feedback
-                              </p>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#0A859B", margin: 0 }}>
+                                  Send Post Session Feedback
+                                </p>
+                                {hasUnsentFeedback && (
+                                  <span
+                                    title="You have unsent feedback"
+                                    style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF9950", flexShrink: 0 }}
+                                  />
+                                )}
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => handleToggleAudio(item.id)}
@@ -683,36 +801,43 @@ export default function OneOnOnes() {
                                         ) : null}
                                       </div>
                                     ) : noteMode === "audio" ? (
-                                      <div className="one-on-one-audio-composer">
-                                        <button
-                                          type="button"
-                                          onClick={() => (isRecording ? stopRecording(item.id) : startRecording(item.id))}
-                                          disabled={!canSubmitAudio}
-                                          className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
-                                        >
-                                          {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                                        </button>
+                                      <div>
+                                        <div className="one-on-one-audio-composer">
+                                          <button
+                                            type="button"
+                                            onClick={() => (isRecording ? stopRecording(item.id) : startRecording(item.id))}
+                                            disabled={!canSubmitAudio}
+                                            className={`one-on-one-audio-mic-btn ${isRecording ? "is-recording" : ""}`}
+                                          >
+                                            {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                                          </button>
 
-                                        <div className="one-on-one-audio-track">
-                                          {isRecording ? (
-                                            <div className="one-on-one-audio-wave">
-                                              {Array.from({ length: 18 }).map((_, waveIndex) => (
-                                                <Motion.span
-                                                  key={waveIndex}
-                                                  className="one-on-one-audio-wave-bar"
-                                                  animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
-                                                  transition={{
-                                                    duration: 1.1,
-                                                    repeat: Number.POSITIVE_INFINITY,
-                                                    delay: waveIndex * 0.04,
-                                                  }}
-                                                />
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <p className="one-on-one-audio-caption">Tap the mic to record</p>
-                                          )}
+                                          <div className="one-on-one-audio-track">
+                                            {isRecording ? (
+                                              <div className="one-on-one-audio-wave">
+                                                {Array.from({ length: 18 }).map((_, waveIndex) => (
+                                                  <Motion.span
+                                                    key={waveIndex}
+                                                    className="one-on-one-audio-wave-bar"
+                                                    animate={{ scaleY: [0.45, 1, 0.35, 0.9, 0.45] }}
+                                                    transition={{
+                                                      duration: 1.1,
+                                                      repeat: Number.POSITIVE_INFINITY,
+                                                      delay: waveIndex * 0.04,
+                                                    }}
+                                                  />
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <p className="one-on-one-audio-caption">Tap the mic to record</p>
+                                            )}
+                                          </div>
                                         </div>
+                                        {isRecording && audioUi.wakeLockWarning ? (
+                                          <p style={{ fontSize: 10.5, color: "#B8862B", background: "#FFF4E5", borderRadius: 8, padding: "6px 8px", marginTop: 8 }}>
+                                            Keep the screen on while recording — this device can't hold it awake automatically.
+                                          </p>
+                                        ) : null}
                                       </div>
                                     ) : (
                                       <div>
@@ -836,6 +961,160 @@ export default function OneOnOnes() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {blocker.state === "blocked" && !kpiPrompt ? (
+          <Motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(45,56,82,0.45)",
+              zIndex: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <Motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ background: "#FFFFFF", borderRadius: 20, padding: 20, width: "100%", maxWidth: 320 }}
+            >
+              <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 17, color: "#2D3852", margin: "0 0 6px" }}>
+                Leave without sending?
+              </p>
+              <p style={{ fontSize: 12.5, color: "#6E7892", lineHeight: 1.5, margin: "0 0 16px" }}>
+                You have feedback that hasn&apos;t been sent yet. If you leave now, it will be lost.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => blocker.reset()}
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    border: "1.5px solid #E4EAF0",
+                    background: "transparent",
+                    color: "#2D3852",
+                    padding: "10px 0",
+                    fontFamily: "Fustat, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Stay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => blocker.proceed()}
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#1FD0EF",
+                    color: "#2D3852",
+                    padding: "10px 0",
+                    fontFamily: "Fustat, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Leave anyway
+                </button>
+              </div>
+            </Motion.div>
+          </Motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {kpiPrompt ? (
+          <Motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(45,56,82,0.55)",
+              zIndex: 110,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <Motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={SPRING}
+              style={{ background: "#FFFFFF", borderRadius: 20, padding: 22, width: "100%", maxWidth: 340, maxHeight: "88vh", overflowY: "auto" }}
+            >
+              <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 19, color: "#2D3852", margin: "0 0 4px" }}>
+                Rate the team
+              </p>
+              <p style={{ fontSize: 12, color: "#6E7892", lineHeight: 1.5, margin: "0 0 18px" }}>
+                Before moving on, score the founding team from 1 (low) to 10 (high) on each of these.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {TEAM_KPIS.map((kpi) => {
+                  const value = kpiValues[kpi.key] ?? 5;
+                  return (
+                    <div key={kpi.key}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", margin: 0 }}>{kpi.label}</p>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0A859B" }}>{value}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={10}
+                        step={1}
+                        value={value}
+                        onChange={(e) => setKpiValue(kpi.key, Number(e.target.value))}
+                        style={{ width: "100%", accentColor: "#1FD0EF" }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {kpiUi.error ? (
+                <p style={{ fontSize: 11, color: "#D9534F", margin: "12px 0 0" }}>{kpiUi.error}</p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={submitKpiRating}
+                disabled={kpiUi.status === "sending"}
+                style={{
+                  width: "100%",
+                  marginTop: 18,
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#1FD0EF",
+                  color: "#2D3852",
+                  padding: "11px 0",
+                  fontFamily: "Fustat, sans-serif",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: kpiUi.status === "sending" ? "default" : "pointer",
+                  opacity: kpiUi.status === "sending" ? 0.65 : 1,
+                }}
+              >
+                {kpiUi.status === "sending" ? "Saving…" : "Submit"}
+              </button>
+            </Motion.div>
+          </Motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1923,6 +1923,66 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
   }
 });
 
+const teamKpisSchema = z
+  .object({
+    trust_conflict_resolution: z.number().int().min(1).max(10),
+    clear_operational_roles: z.number().int().min(1).max(10),
+    complementary_personality: z.number().int().min(1).max(10),
+    vision_alignment: z.number().int().min(1).max(10),
+  })
+  .strict();
+
+// One rating per feedback submission (not per 1:1) — an EM may send several
+// audios/texts over time for the same 1:1, and each gets its own snapshot.
+app.patch("/one-on-ones/:id/audio/:submissionId", async (req, res) => {
+  try {
+    const auth = req as AuthenticatedRequest;
+    if (!auth?.auth?.email || !auth?.auth?.sub) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const oneOnOneId = z.string().parse(req.params.id);
+    const submissionId = z.string().parse(req.params.submissionId);
+    const parsed = z.object({ team_kpis: teamKpisSchema }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid team_kpis payload", details: parsed.error.issues });
+      return;
+    }
+
+    const me = await resolvePersonFromAuth(auth.auth);
+    if (!me) {
+      res.status(403).json({ error: "No person record linked to this email" });
+      return;
+    }
+    if (normalizeContactType(me.contact_type) !== "experience_maker") {
+      res.status(403).json({ error: "Only experience makers can rate the team." });
+      return;
+    }
+
+    const oneOnOne = await resolveAccessibleOneOnOneForPerson(oneOnOneId, me);
+    if (!oneOnOne) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const submission = await prisma.oneOnOneAudioSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission || submission.one_on_one_id !== oneOnOne.id || submission.user_id !== me.id) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const updated = await prisma.oneOnOneAudioSubmission.update({
+      where: { id: submissionId },
+      data: { team_kpis: parsed.data.team_kpis },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save team KPI rating" });
+  }
+});
+
 const teamNoteSchema = z
   .object({
     target_type: z.enum(["startup", "founder"]),

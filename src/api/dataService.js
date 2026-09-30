@@ -513,6 +513,14 @@ export async function registerOneOnOneAudioSubmission(oneOnOneId, payload) {
   });
 }
 
+export async function submitOneOnOneTeamKpis(oneOnOneId, submissionId, teamKpis) {
+  if (!oneOnOneId || !submissionId) throw new Error("Missing one-on-one or submission id.");
+  return api(`/one-on-ones/${encodeURIComponent(oneOnOneId)}/audio/${encodeURIComponent(submissionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ team_kpis: teamKpis }),
+  });
+}
+
 export async function signOut() {
   if (!supabase) return;
   await supabase.auth.signOut();

@@ -162,6 +162,10 @@ model OneOnOneAudioSubmission {
   transcript_text  String?
   transcript_error String?
   transcribed_at   DateTime?
+  /// Team-health rating the EM gives right after sending this feedback.
+  /// Shape: { trust_conflict_resolution, clear_operational_roles,
+  ///   complementary_personality, vision_alignment } — each 1-10.
+  team_kpis        Json?
   createdAt        DateTime @default(now()) @map("createdat")
   updatedAt        DateTime @updatedAt @map("updatedat")
 
