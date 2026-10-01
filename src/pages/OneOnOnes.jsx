@@ -976,13 +976,13 @@ export default function OneOnOnes() {
                                             style={{
                                               flex: 1,
                                               borderRadius: 10,
-                                              border: "1.5px solid #E4EAF0",
-                                              background: "transparent",
-                                              color: "#6E7892",
-                                              padding: "10px 0",
+                                              border: "none",
+                                              background: "#1FD0EF",
+                                              color: "#2D3852",
+                                              padding: "12px 0",
                                               fontFamily: "Fustat, sans-serif",
                                               fontWeight: 700,
-                                              fontSize: 12,
+                                              fontSize: 13,
                                               cursor: "pointer",
                                               display: "flex",
                                               alignItems: "center",
@@ -990,7 +990,7 @@ export default function OneOnOnes() {
                                               gap: 6,
                                             }}
                                           >
-                                            <Mic className="h-3.5 w-3.5" /> Audio
+                                            <Mic className="h-4 w-4" /> Audio
                                           </button>
                                           <button
                                             type="button"
@@ -998,13 +998,13 @@ export default function OneOnOnes() {
                                             style={{
                                               flex: 1,
                                               borderRadius: 10,
-                                              border: "1.5px solid #E4EAF0",
-                                              background: "transparent",
-                                              color: "#6E7892",
-                                              padding: "10px 0",
+                                              border: "none",
+                                              background: "#2D3852",
+                                              color: "#F2F8FA",
+                                              padding: "12px 0",
                                               fontFamily: "Fustat, sans-serif",
                                               fontWeight: 700,
-                                              fontSize: 12,
+                                              fontSize: 13,
                                               cursor: "pointer",
                                               display: "flex",
                                               alignItems: "center",
@@ -1012,7 +1012,7 @@ export default function OneOnOnes() {
                                               gap: 6,
                                             }}
                                           >
-                                            <PenLine className="h-3.5 w-3.5" /> Text
+                                            <PenLine className="h-4 w-4" /> Text
                                           </button>
                                         </div>
                                       </div>
