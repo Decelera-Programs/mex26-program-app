@@ -679,7 +679,8 @@ export default function OneOnOnes() {
                               <button
                                 type="button"
                                 onClick={() => handleToggleAudio(item.id)}
-                                style={{ border: 0, background: "transparent", color: "#0A859B", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.01em", cursor: "pointer" }}
+                                // Padding + equal negative margin = bigger tap area with no change in card size.
+                                style={{ border: 0, background: "transparent", color: "#0A859B", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.01em", cursor: "pointer", padding: "12px 14px", margin: "-12px -14px -12px 0", position: "relative", touchAction: "manipulation" }}
                               >
                                 {expandedAudioId === item.id ? "Close" : "Open"}
                               </button>
