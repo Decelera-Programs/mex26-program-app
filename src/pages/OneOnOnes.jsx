@@ -213,6 +213,10 @@ export default function OneOnOnes() {
   async function handleToggleAudio(oneOnOneId) {
     const next = expandedAudioId === oneOnOneId ? null : oneOnOneId;
     setExpandedAudioId(next);
+    if (!next) {
+      const sent = audioUiByMeeting[oneOnOneId]?.status === "success" || textUiByMeeting[oneOnOneId]?.status === "success";
+      if (sent) resetComposer(oneOnOneId);
+    }
     if (next) {
       try {
         await ensureAudioLoaded(oneOnOneId);
@@ -432,6 +436,15 @@ export default function OneOnOnes() {
   }
 
   function setMeetingNoteMode(oneOnOneId, mode) {
+    setNoteModeByMeeting((prev) => ({ ...prev, [oneOnOneId]: mode }));
+  }
+
+  // After a successful send the composer stays on its "Sent" state; this clears it so another one can be sent.
+  function resetComposer(oneOnOneId, mode = null) {
+    const previewUrl = audioUiByMeeting[oneOnOneId]?.previewUrl;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setAudioUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "idle", error: "" } }));
+    setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "idle" } }));
     setNoteModeByMeeting((prev) => ({ ...prev, [oneOnOneId]: mode }));
   }
 
@@ -663,27 +676,85 @@ export default function OneOnOnes() {
                         </div>
 
                         {canSubmitAudio ? (
-                          <Motion.div layout className="mx-[10px] mb-[10px] rounded-[12px] px-[12px] py-[9px]" style={{ background: "#F2F8FA" }}>
-                            <div className="one-on-one-audio-header">
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#0A859B", margin: 0 }}>
-                                  Send Post Session Feedback
-                                </p>
-                                {hasUnsentFeedback && (
-                                  <span
-                                    title="You have unsent feedback"
-                                    style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF9950", flexShrink: 0 }}
-                                  />
-                                )}
-                              </div>
+                          <Motion.div layout className="mx-[10px] mb-[10px] rounded-[14px] overflow-hidden" style={{ background: "#F2F8FA" }}>
+                            {/* Dock: the whole bar toggles the panel; mic / pen jump straight into that mode (1 tap instead of 3). */}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                height: 36,
+                                padding: "0 4px 0 12px",
+                                background: "#2D3852",
+                                borderRadius: 14,
+                              }}
+                            >
                               <button
                                 type="button"
                                 onClick={() => handleToggleAudio(item.id)}
-                                // Padding + equal negative margin = bigger tap area with no change in card size.
-                                style={{ border: 0, background: "transparent", color: "#0A859B", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.01em", cursor: "pointer", padding: "12px 14px", margin: "-12px -14px -12px 0", position: "relative", touchAction: "manipulation" }}
+                                aria-expanded={expandedAudioId === item.id}
+                                style={{
+                                  flex: 1,
+                                  minWidth: 0,
+                                  height: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  border: 0,
+                                  background: "transparent",
+                                  color: "#F2F8FA",
+                                  fontFamily: "Fustat, sans-serif",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                  touchAction: "manipulation",
+                                }}
                               >
-                                {expandedAudioId === item.id ? "Close" : "Open"}
+                                <span className="truncate">Post-session feedback</span>
+                                {hasUnsentFeedback && (
+                                  <span
+                                    title="You have unsent feedback"
+                                    style={{ width: 8, height: 8, borderRadius: "50%", background: "#FFB950", flexShrink: 0 }}
+                                  />
+                                )}
                               </button>
+                              {expandedAudioId === item.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAudio(item.id)}
+                                  aria-label="Close feedback"
+                                  style={{ width: 44, height: 36, border: 0, background: "transparent", color: "#B9C1D4", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "Fustat, sans-serif", touchAction: "manipulation" }}
+                                >
+                                  Close
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    aria-label="Record audio feedback"
+                                    onClick={() => {
+                                      setMeetingNoteMode(item.id, "audio");
+                                      if (expandedAudioId !== item.id) handleToggleAudio(item.id);
+                                    }}
+                                    style={{ width: 30, height: 30, borderRadius: "50%", border: 0, background: "#1FD0EF", color: "#2D3852", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}
+                                  >
+                                    <Mic size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label="Write text feedback"
+                                    onClick={() => {
+                                      setMeetingNoteMode(item.id, "text");
+                                      if (expandedAudioId !== item.id) handleToggleAudio(item.id);
+                                    }}
+                                    style={{ width: 30, height: 30, borderRadius: "50%", border: 0, background: "rgba(242,248,250,0.14)", color: "#F2F8FA", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}
+                                  >
+                                    <PenLine size={15} />
+                                  </button>
+                                </>
+                              )}
                             </div>
 
                             <AnimatePresence initial={false}>
@@ -695,7 +766,7 @@ export default function OneOnOnes() {
                                   transition={{ duration: 0.2 }}
                                   className="overflow-hidden"
                                 >
-                                  <div className="one-on-one-audio-body">
+                                  <div className="one-on-one-audio-body" style={{ padding: "0 12px 12px" }}>
                                     <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid #E2E9EE" }}>
                                       <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0A859B", marginBottom: 5 }}>
                                         Post-session feedback
@@ -754,6 +825,15 @@ export default function OneOnOnes() {
                                             }}
                                           >
                                             <Upload size={14} /> Retry send
+                                          </button>
+                                        ) : null}
+                                        {audioUi.status === "success" ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => resetComposer(item.id, "audio")}
+                                            style={{ width: "100%", marginTop: 10, borderRadius: 12, border: "1.5px solid #E4EAF0", background: "transparent", color: "#2D3852", padding: "10px 0", fontFamily: "Fustat, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                                          >
+                                            <Mic size={14} /> Send another
                                           </button>
                                         ) : null}
                                       </div>
@@ -827,6 +907,15 @@ export default function OneOnOnes() {
                                             </>
                                           )}
                                         </button>
+                                        {textUi.status === "success" ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => resetComposer(item.id, "text")}
+                                            style={{ width: "100%", marginTop: 8, borderRadius: 12, border: "1.5px solid #E4EAF0", background: "transparent", color: "#2D3852", padding: "10px 0", fontFamily: "Fustat, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                                          >
+                                            <PenLine size={14} /> Send another
+                                          </button>
+                                        ) : null}
                                         {textUi.error ? (
                                           <p style={{ fontSize: 11, color: "#D9534F", margin: "6px 0 0" }}>{textUi.error}</p>
                                         ) : null}
