@@ -79,7 +79,7 @@ export default function TeamNotes() {
         const me = await getCurrentUser();
         if (cancelled) return;
         setUser(me);
-        if (!me?.id || me.contact_type !== "team") return;
+        if (!me?.id || (me.contact_type !== "team" && !me.is_team)) return;
         const [startups, people] = await Promise.all([listStartups(), listPeople()]);
         if (cancelled) return;
         setAllStartups(startups || []);
@@ -194,7 +194,7 @@ export default function TeamNotes() {
   if (loading) return <LoadingState message="Loading team notes" />;
   if (!user) return <UserNotRegisteredError />;
 
-  if (user.contact_type !== "team") {
+  if (user.contact_type !== "team" && !user.is_team) {
     return (
       <div className="w-full pt-[30px] pb-6" style={{ background: "#F2F8FA" }}>
         <div style={{ width: "calc(100% - 20px)", maxWidth: 370 }} className="mx-auto">

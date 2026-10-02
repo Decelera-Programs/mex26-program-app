@@ -231,7 +231,7 @@ export default function Schedule() {
     return                            { background: "#FAF3DC", textColor: "#2D3852",  boxShadow: "0 18px 40px rgba(31,208,239,0.10)" };
   })();
 
-  const isTeamUser = user?.contact_type === "team";
+  const isTeamUser = user?.contact_type === "team" || Boolean(user?.is_team);
 
   const dayEvents = useMemo(() => {
     const activeDayKey = activeDay.format("YYYY-MM-DD");

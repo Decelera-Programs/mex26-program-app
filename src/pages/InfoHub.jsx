@@ -27,7 +27,7 @@ export default function InfoHub() {
 
   useEffect(() => {
     getCurrentUser().then((u) => {
-      if (u?.contact_type === "team") setIsTeam(true);
+      if (u?.contact_type === "team" || u?.is_team) setIsTeam(true);
     }).catch(() => {});
   }, []);
 

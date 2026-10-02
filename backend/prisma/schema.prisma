@@ -43,6 +43,7 @@ model Person {
   linkedin_url   String?
   company_name   String?
   contact_type   String?
+  is_team        Boolean  @default(false)
   arrival_date   DateTime? @db.Timestamptz(6)
   departure_date DateTime? @db.Timestamptz(6)
   expertise_tags Json     @default("[]")

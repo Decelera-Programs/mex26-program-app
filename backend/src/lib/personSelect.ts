@@ -11,6 +11,8 @@ export const personSafeSelect = {
   linkedin_url: true,
   company_name: true,
   contact_type: true,
+  // Extra role: a person can be e.g. an experience_maker AND part of the team.
+  is_team: true,
   arrival_date: true,
   departure_date: true,
   expertise_tags: true,

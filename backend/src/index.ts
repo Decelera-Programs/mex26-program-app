@@ -1196,7 +1196,7 @@ app.get("/events", async (req, res) => {
       orderBy: { start_time: "asc" },
     });
     const contactType = normalizeContactType(person.contact_type);
-    const visibleEvents = contactType === "team"
+    const visibleEvents = contactType === "team" || person.is_team
       ? events
       : events.filter((event) => isEventVisibleForContactType(event, contactType));
     res.set("Cache-Control", "private, max-age=30");
@@ -2053,7 +2053,7 @@ app.get("/team-notes/me", async (req, res) => {
       res.status(403).json({ error: "No person record linked to this email" });
       return;
     }
-    if (normalizeContactType(me.contact_type) !== "team") {
+    if (normalizeContactType(me.contact_type) !== "team" && !me.is_team) {
       res.status(403).json({ error: "Only team members can access team notes." });
       return;
     }
@@ -2100,7 +2100,7 @@ app.post("/team-notes", async (req, res) => {
       res.status(403).json({ error: "No person record linked to this email" });
       return;
     }
-    if (normalizeContactType(me.contact_type) !== "team") {
+    if (normalizeContactType(me.contact_type) !== "team" && !me.is_team) {
       res.status(403).json({ error: "Only team members can submit team notes." });
       return;
     }
