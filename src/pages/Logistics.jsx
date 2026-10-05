@@ -1,26 +1,22 @@
 import { motion as Motion } from "framer-motion";
-import { MapPin, Plane, Utensils, Sun, Phone, AlertCircle } from "lucide-react";
+import { MapPin, Plane, Sun, Phone, AlertCircle } from "lucide-react";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
-// TODO: all logistics content below is still the Menorca 2026 venue (hotel,
-// address, airport transfer instructions). Replace with the Decelera México 2026 details.
-const HOTEL_MAP_URL =
-  "https://www.google.com/maps/search/?api=1&query=Beach+Club+Menorca+Av.+de+la+Playa+Son+Parc+Menorca";
+const HOTEL_MAP_URL = "https://maps.app.goo.gl/umecBv2RkQEjbbpw6";
 
 const sections = [
   {
     icon: MapPin,
     title: "Hotel",
     items: [
-      { label: "Venue", value: "Beach Club Menorca" },
+      { label: "Venue", value: "Hotel Mahekal Beach Resort Playa del Carmen" },
       {
         label: "Address",
-        value: "Av. de la Playa, H2, 07740 Son Parc, Menorca, Spain",
+        value: "Calle 38 Norte, entre 5ª Avenida y Zona Federal Marítima, 77710 Playa del Carmen, Q.R., México",
         href: HOTEL_MAP_URL,
         linkLabel: "Open in Google Maps",
       },
-      { label: "Included", value: "Accommodation and all meals." },
-      { label: "Not included", value: "Local taxes." },
+      { label: "Services", value: "All inclusive" },
     ],
   },
   {
@@ -29,33 +25,18 @@ const sections = [
     items: [
       {
         label: "Before arrival",
-        value: "Exact transfer information will be sent by email 48 hours before your arrival date.",
+        value: "Your transfer details will be sent 24–48 hours before your arrival.",
       },
       {
         label: "At the airport",
         value:
-          "After collecting your luggage, head to the exit and turn left. Look for the Autobuses Menorca desk with a DECELERA sign — their staff will assist you.",
+          "When you land, head to the Tour Operators area. Autotur staff (wearing green polo shirts) will be waiting with a Decelera sign.",
       },
       {
         label: "Delays",
         value:
-          "Transfer times are approximate and they will wait for you. If your flight is significantly delayed, contact Kamil on WhatsApp so we can arrange an alternative transfer.",
+          "Times are approximate. If your flight is delayed, please message Kamil on WhatsApp.",
       },
-      {
-        label: "Return",
-        value:
-          "Your return transfer departs approximately 2–3 hours before your flight. Details will be sent 24 hours in advance.",
-      },
-    ],
-  },
-  {
-    icon: Utensils,
-    title: "Meals",
-    items: [
-      { label: "Restaurant", value: "Buffet restaurant at the hotel." },
-      { label: "Breakfast", value: "8:00–9:30" },
-      { label: "Lunch", value: "13:00–14:30" },
-      { label: "Dinner", value: "19:00–21:30" },
     ],
   },
   {
@@ -81,7 +62,7 @@ const sections = [
     items: [
       { label: "Name", value: "Kamil Saab Dávila" },
       { label: "Email", value: "kamil@decelera.com", href: "mailto:kamil@decelera.com" },
-      { label: "Phone / WhatsApp", value: "+34 638 413 445", href: "tel:+34638413445" },
+      { label: "Phone / WhatsApp", value: "+34 638 413 445", href: "https://wa.me/34638413445" },
     ],
   },
   {
@@ -90,11 +71,19 @@ const sections = [
     items: [
       {
         label: "If you need care",
-        value: "Let the Decelera team know — we will take you to the nearest hospital in the area.",
+        value: "Let the Decelera team know — we will take you to the nearest private hospital.",
       },
-      { label: "Clínica Juaneda", value: "Mahón" },
-      { label: "Hospital Mateo Orfila", value: "Mahón area" },
-      { label: "Emergency", value: "112 (Spain)" },
+      {
+        label: "Hospital Amerimed Playa del Carmen",
+        value: "+52 984 206 5450 · 24h emergencies · Carretera Federal Mz 155 Lote 3, entre Calle 20 y Calle 22, Col. Ejidal, 77712",
+        href: "tel:+529842065450",
+      },
+      {
+        label: "Hospiten Riviera Maya",
+        value: "+52 984 159 2200 · 24h emergencies · Av. Balamcanché Lote 1, Mz 30, Playacar, 77710",
+        href: "tel:+529841592200",
+      },
+      { label: "Emergency", value: "911 (Mexico)", href: "tel:911" },
     ],
   },
 ];
@@ -174,7 +163,7 @@ export default function Logistics() {
               Logistics
             </h1>
             <p style={{ fontSize: 12, color: "#6E7892", marginTop: 2 }}>
-              Hotel, transfers, meals &amp; essentials · México 2026
+              Hotel, transfers &amp; essentials · México 2026
             </p>
           </Motion.div>
         </div>

@@ -5,7 +5,7 @@ import { Rocket, Users, MapPin, Palette, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "../api/dataService";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
 
-const MAPS_URL = "https://maps.app.goo.gl/SX1QnkxGqsaV1qu8A";
+const MAPS_URL = "https://maps.app.goo.gl/umecBv2RkQEjbbpw6";
 
 
 const tiles = [
@@ -170,17 +170,17 @@ export default function InfoHub() {
             </div>
             <div>
               <p style={{ fontSize: 15, fontWeight: 600, color: "#2D3852", margin: 0 }}>
-                Hotel Son Parc Beach Club Menorca
+                Hotel Mahekal Beach Resort Playa del Carmen
               </p>
               <p style={{ fontSize: 12, color: "#6E7892", marginTop: 3 }}>
-                Av. de la Playa, H2 · Son Parc
+                Calle 38 Norte · Playa del Carmen
               </p>
             </div>
           </div>
           <div style={{ marginTop: 14, borderRadius: 12, overflow: "hidden", height: 160, position: "relative" }}>
             <iframe
-              title="Hotel Son Parc Beach Club Menorca"
-              src="https://www.google.com/maps?q=Hotel+Son+Parc+Beach+Club,Son+Parc,Menorca&output=embed"
+              title="Hotel Mahekal Beach Resort Playa del Carmen"
+              src="https://www.google.com/maps?q=Mahekal+Beach+Resort+Playa+del+Carmen&output=embed"
               width="100%"
               height="190"
               style={{ border: 0, display: "block", marginTop: -1 }}
