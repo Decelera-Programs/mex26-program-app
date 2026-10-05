@@ -82,7 +82,7 @@ function isEventVisibleForContactType(event: { visible_to_contact_types?: unknow
 
 // The program runs in Mexico. All "what day is it" / presence checks
 // (campaign audiences, on-site-today filters) resolve against this timezone.
-const AUDIENCE_TIMEZONE = "America/Mexico_City";
+const AUDIENCE_TIMEZONE = "America/Cancun";
 const ADMIN_EMAIL_ALLOWLIST = (process.env.CAMPAIGN_ADMIN_EMAILS || "")
   .split(",")
   .map((email) => email.trim().toLowerCase())

@@ -1,4 +1,4 @@
-const DEFAULT_TIMEZONE = "America/Mexico_City";
+const DEFAULT_TIMEZONE = "America/Cancun";
 
 export function dateKeyInTimezone(raw: Date | string | null | undefined, timeZone = DEFAULT_TIMEZONE) {
   if (!raw) return null;

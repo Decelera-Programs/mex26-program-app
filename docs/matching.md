@@ -18,7 +18,7 @@ per day: a founder already matched today is skipped, and
 
 | # | Step | Function |
 |---|---|---|
-| 1 | **Pool** — people with `contact_type in (founder, experience_maker)`, present today (`arrival ≤ today ≤ departure` in `America/Mexico_City`; **both dates required** — a missing bound means not present). Founders need meaningful `expertise_tags` **or** meaningful `startup.challenges`; EMs need meaningful `expertise_tags`. Founders already matched today are dropped. | `loadMatchingPoolForToday` |
+| 1 | **Pool** — people with `contact_type in (founder, experience_maker)`, present today (`arrival ≤ today ≤ departure` in `America/Cancun`; **both dates required** — a missing bound means not present). Founders need meaningful `expertise_tags` **or** meaningful `startup.challenges`; EMs need meaningful `expertise_tags`. Founders already matched today are dropped. | `loadMatchingPoolForToday` |
 | 2 | **Affinity score** — `score = tagScore + textScore`. **tagScore**: from the founder's 1–2 worst‑rated `challenges.sections` derive `challengeTags` (via `MATCH_SECTION_TO_TAGS`), then `3·(EM tags ∩ challengeTags) + 1·(EM tags ∩ founder tags)`. **textScore**: semantic similarity between the founder's stated need and the EM's profile (see *Semantic scoring* below). Keep `score > 0`. Pairs matched in the last day are excluded here. | `scoreCandidates`, `topChallengeSections`, `loadFounderNeedVectors`, `loadEmOfferVectors` |
 | 3 | **Weight** — `weight = score · emMultiplier(EM) · pairMultiplier(founder,EM)`. `emMultiplier` dampens EMs founders keep rating unhelpful; `pairMultiplier` is the repeated‑pair cooldown. | `loadEmScoreMultipliers`, `loadPairMultipliers` |
 | 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. Then the **quality floor** (`MATCH_MIN_SCORE`) drops any assigned pair whose `score` is too low to be worth a recommendation. | `runDailyMatchingJob` step 2 |
@@ -34,7 +34,7 @@ never picks the person.
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `MATCHING_TIMEZONE` | `America/Mexico_City` | "Today" + presence checks for the job. |
+| `MATCHING_TIMEZONE` | `America/Cancun` | "Today" + presence checks for the job. |
 | `MATCH_WEIGHT_CHALLENGE` | `3` | Weight of an EM tag that matches a founder's weak challenge area. |
 | `MATCH_WEIGHT_DIRECT_TAG` | `1` | Weight of an EM tag that matches a founder's own expertise tag. In practice founders rarely have `expertise_tags`, so this term is usually 0. |
 | `MATCH_WEIGHT_TEXT` | `8` | Max "tag points" a perfect semantic match contributes. |
@@ -195,7 +195,7 @@ select
 from public.match m
 join public.person f on f.id = m.founder_id
 join public.person e on e.id = m.em_id
-where m.match_date = (current_date at time zone 'America/Mexico_City')::date
+where m.match_date = (current_date at time zone 'America/Cancun')::date
 order by m.score desc;
 ```
 
@@ -204,7 +204,7 @@ EM load for a day:
 ```sql
 select e.full_name, count(*) as founders_matched
 from public.match m join public.person e on e.id = m.em_id
-where m.match_date = (current_date at time zone 'America/Mexico_City')::date
+where m.match_date = (current_date at time zone 'America/Cancun')::date
 group by e.full_name order by founders_matched desc;
 ```
 

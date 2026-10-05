@@ -1,7 +1,7 @@
 import { prisma } from "../db.js";
 import { dateKeyInTimezone } from "../lib/dateTime.js";
 
-const PROGRAM_TIMEZONE = "America/Mexico_City";
+const PROGRAM_TIMEZONE = "America/Cancun";
 // Reminder lead time. The job runs every 5 minutes, so an event is picked up
 // on the first run once it's within this window (26–31 min before it starts).
 const REMINDER_LEAD_MS = 31 * 60 * 1000;

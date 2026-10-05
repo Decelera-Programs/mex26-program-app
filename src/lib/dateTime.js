@@ -1,8 +1,9 @@
-// The program runs in Mexico and every time in the app is shown in Mexico
-// time, whatever the device's timezone (the team previews from Spain).
+// The program runs in Playa del Carmen (Quintana Roo, UTC-5 all year, no DST;
+// note this is one hour ahead of Mexico City) and every time in the app is shown
+// in that local time, whatever the device's timezone (the team previews from Spain).
 //
 // The database stores real instants (timestamptz; Prisma serializes them as
-// UTC, e.g. "2026-10-10T14:00:00.000Z" = 08:00 in Mexico). The data layer
+// UTC, e.g. "2026-10-10T14:00:00.000Z" = 09:00 in Playa del Carmen). The data layer
 // converts event / 1:1 times into naive Mexico wall-clock strings
 // ("2026-10-10T08:00:00") with `toProgramWallClock`, and every formatter and
 // moment() call below reads those naive strings as-is. Anything compared
@@ -14,7 +15,7 @@
 //
 // Writing back (campaign scheduled_for) goes the other way with
 // `programWallClockToDate`, so the backend always receives a real instant.
-export const PROGRAM_TIMEZONE = "America/Mexico_City";
+export const PROGRAM_TIMEZONE = "America/Cancun";
 
 // First day of the program (Day 1), as a Mexico calendar date. Drives the
 // Home countdown and the Moments day numbering.

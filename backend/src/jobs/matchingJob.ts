@@ -10,7 +10,7 @@ const OPENAI_MATCHING_MODEL = (process.env.OPENAI_MATCHING_MODEL || "gpt-4o-mini
 const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small").trim();
 
 // Founder<->Experience Maker daily matching runs in the program's timezone.
-export const MATCHING_TIMEZONE = "America/Mexico_City";
+export const MATCHING_TIMEZONE = "America/Cancun";
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 export const MATCH_WEIGHT_CHALLENGE = 3;
 export const MATCH_WEIGHT_DIRECT_TAG = 1;

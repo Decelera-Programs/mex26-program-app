@@ -560,7 +560,7 @@ export default function Campaigns() {
                     value={form.scheduledFor}
                     onChange={(e) => updateForm({ scheduledFor: e.target.value })}
                   />
-                  <p style={{ fontSize: 10.5, color: "#9AA3B8", margin: "5px 2px 0" }}>Mexico time (CDMX)</p>
+                  <p style={{ fontSize: 10.5, color: "#9AA3B8", margin: "5px 2px 0" }}>Playa del Carmen time</p>
                 </>
               )}
             </div>
