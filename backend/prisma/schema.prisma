@@ -167,6 +167,9 @@ model OneOnOneAudioSubmission {
   /// Shape: { trust_conflict_resolution, clear_operational_roles,
   ///   complementary_personality, vision_alignment } — each 1-10.
   team_kpis        Json?
+  /// Hard-skill rating the EM gives per founder of the startup, in the same step.
+  /// Shape: { [founder_person_id]: { niche, tech, gtm } } — each 1-10.
+  hard_skills      Json?
   createdAt        DateTime @default(now()) @map("createdat")
   updatedAt        DateTime @updatedAt @map("updatedat")
 

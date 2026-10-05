@@ -226,6 +226,10 @@ function normalizeOneOnOne(record) {
     startup_logo_url: normalizePhotoUrl(record.startup?.logo_url),
     em_name: record.em?.full_name || "",
     em_photo_url: normalizePhotoUrl(record.em?.photo_url),
+    startup_founders: (record.startup?.people || []).map((person) => ({
+      ...person,
+      photo_url: normalizePhotoUrl(person.photo_url),
+    })),
   };
 }
 
@@ -514,11 +518,11 @@ export async function registerOneOnOneAudioSubmission(oneOnOneId, payload) {
   });
 }
 
-export async function submitOneOnOneTeamKpis(oneOnOneId, submissionId, teamKpis) {
+export async function submitOneOnOneTeamKpis(oneOnOneId, submissionId, teamKpis, hardSkills) {
   if (!oneOnOneId || !submissionId) throw new Error("Missing one-on-one or submission id.");
   return api(`/one-on-ones/${encodeURIComponent(oneOnOneId)}/audio/${encodeURIComponent(submissionId)}`, {
     method: "PATCH",
-    body: JSON.stringify({ team_kpis: teamKpis }),
+    body: JSON.stringify({ team_kpis: teamKpis, ...(hardSkills ? { hard_skills: hardSkills } : {}) }),
   });
 }
 

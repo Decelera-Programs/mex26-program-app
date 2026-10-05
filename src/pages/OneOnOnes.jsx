@@ -26,11 +26,54 @@ import UserNotRegisteredError from "./UserNotRegisteredError";
 import { SPRING, stagger } from "../lib/motion";
 
 const TEAM_KPIS = [
-  { key: "trust_conflict_resolution", label: "Trust & Conflict Resolution" },
-  { key: "clear_operational_roles", label: "Clear Operational Roles" },
-  { key: "complementary_personality", label: "Complementary Personality" },
-  { key: "vision_alignment", label: "Vision Alignment" },
+  {
+    key: "trust_conflict_resolution",
+    label: "Trust & Conflict Resolution",
+    description:
+      "Quality of the team's relational dynamic under pressure: trust, respect and the ability to work through friction without breaking.",
+  },
+  {
+    key: "clear_operational_roles",
+    label: "Clear Operational Roles",
+    description:
+      "The three team blocks (niche, go-to-market and product/tech) are covered and everyone knows who answers for each.",
+  },
+  {
+    key: "complementary_personality",
+    label: "Complementary Personality",
+    description:
+      "How the mix of personalities affects the team's output under pressure. Tells toxic friction apart from productive friction.",
+  },
+  {
+    key: "vision_alignment",
+    label: "Vision Alignment",
+    description:
+      "How far the cofounders share the same vision for the company: what they give up, what counts as success and at what speed.",
+  },
 ];
+
+const HARD_SKILLS = [
+  {
+    key: "niche",
+    label: "Niche Experience",
+    description:
+      "Real distance between the founder's history and the problem they solve: operating experience in the sector, active network and personal angle.",
+  },
+  {
+    key: "tech",
+    label: "Tech Experience",
+    description:
+      "Real ability to build and lead the technical product: experience developing or leading tech products, judgment on architecture and stack, and credibility with technical talent. What they have done counts, not what they say they know.",
+  },
+  {
+    key: "gtm",
+    label: "Go to Market Experience",
+    description:
+      "Real experience reaching the customer: having sold in this market, knowing the sales cycle and channels, and having access to the first customers. Lived sales and traction count, not theory.",
+  },
+];
+
+const DEFAULT_HARD_VALUES = Object.fromEntries(HARD_SKILLS.map((skill) => [skill.key, 5]));
 
 // Sliders need a starting position — default at the midpoint rather than
 // leaving the field ambiguous between "unanswered" and "rated a 5".
@@ -51,6 +94,9 @@ export default function OneOnOnes() {
   const [kpiPrompt, setKpiPrompt] = useState(null); // { oneOnOneId, submissionId } | null
   const [kpiValues, setKpiValues] = useState({});
   const [kpiUi, setKpiUi] = useState({});
+  const [kpiStage, setKpiStage] = useState("team"); // "team" | "hard"
+  const [hardValues, setHardValues] = useState({}); // founderId -> { niche, tech, gtm }
+  const [hardIndex, setHardIndex] = useState(0);
   const [recordingElapsedByMeeting, setRecordingElapsedByMeeting] = useState({});
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -202,7 +248,8 @@ export default function OneOnOnes() {
 
   if (loading) return <LoadingState message="Loading your 1:1s" />;
   if (!user) return <UserNotRegisteredError />;
-  const canSubmitAudio = user.contact_type === "experience_maker";
+  // Team members can run the flow too, but only see 1:1s where they are the assigned EM.
+  const canSubmitAudio = user.contact_type === "experience_maker" || user.contact_type === "team" || Boolean(user.is_team);
 
   async function ensureAudioLoaded(oneOnOneId) {
     if (audioDataByMeeting[oneOnOneId]) return;
@@ -406,9 +453,7 @@ export default function OneOnOnes() {
         ...prev,
         [oneOnOneId]: { ...prev[oneOnOneId], status: "success", error: "" },
       }));
-      setKpiValues(DEFAULT_KPI_VALUES);
-      setKpiUi({});
-      setKpiPrompt({ oneOnOneId, submissionId: created.id });
+      openKpiPrompt(oneOnOneId, created.id);
       // Refresh in the background — it re-signs every past attempt's playback
       // URL, which only matters once they reopen this card, not for "Sent".
       getOneOnOneAudio(oneOnOneId)
@@ -456,9 +501,7 @@ export default function OneOnOnes() {
       const created = await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
       setTextByMeeting((prev) => ({ ...prev, [oneOnOneId]: "" }));
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "success" } }));
-      setKpiValues(DEFAULT_KPI_VALUES);
-      setKpiUi({});
-      setKpiPrompt({ oneOnOneId, submissionId: created.id });
+      openKpiPrompt(oneOnOneId, created.id);
       getOneOnOneAudio(oneOnOneId)
         .then((refreshed) => setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed })))
         .catch(() => {});
@@ -468,18 +511,76 @@ export default function OneOnOnes() {
     }
   }
 
+  function openKpiPrompt(oneOnOneId, submissionId) {
+    setKpiValues(DEFAULT_KPI_VALUES);
+    setKpiUi({});
+    setKpiStage("team");
+    setHardValues({});
+    setHardIndex(0);
+    setKpiPrompt({ oneOnOneId, submissionId });
+  }
+
   function setKpiValue(kpiKey, value) {
     setKpiValues((prev) => ({ ...prev, [kpiKey]: value }));
+  }
+
+  function setHardValue(founderId, skillKey, value) {
+    setHardValues((prev) => ({
+      ...prev,
+      [founderId]: { ...DEFAULT_HARD_VALUES, ...prev[founderId], [skillKey]: value },
+    }));
+  }
+
+  // Founders of the rated 1:1's startup — each one gets a hard-skills step.
+  const kpiFounders = items.find((item) => item.id === kpiPrompt?.oneOnOneId)?.startup_founders || [];
+
+  function handleKpiNext() {
+    if (kpiFounders.length > 0) {
+      setKpiUi({});
+      setHardIndex(0);
+      setKpiStage("hard");
+    } else {
+      submitKpiRating();
+    }
+  }
+
+  function handleHardNext() {
+    if (hardIndex < kpiFounders.length - 1) {
+      setHardIndex((i) => i + 1);
+    } else {
+      submitKpiRating();
+    }
+  }
+
+  function handleHardBack() {
+    if (hardIndex > 0) {
+      setHardIndex((i) => i - 1);
+    } else {
+      setKpiStage("team");
+    }
   }
 
   async function submitKpiRating() {
     if (!kpiPrompt) return;
     setKpiUi({ status: "sending" });
     try {
-      await submitOneOnOneTeamKpis(kpiPrompt.oneOnOneId, kpiPrompt.submissionId, { ...DEFAULT_KPI_VALUES, ...kpiValues });
+      const hardSkills =
+        kpiFounders.length > 0
+          ? Object.fromEntries(
+              kpiFounders.map((founder) => [founder.id, { ...DEFAULT_HARD_VALUES, ...hardValues[founder.id] }]),
+            )
+          : undefined;
+      await submitOneOnOneTeamKpis(
+        kpiPrompt.oneOnOneId,
+        kpiPrompt.submissionId,
+        { ...DEFAULT_KPI_VALUES, ...kpiValues },
+        hardSkills,
+      );
       setKpiPrompt(null);
       setKpiValues({});
       setKpiUi({});
+      setHardValues({});
+      setKpiStage("team");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save the rating.";
       setKpiUi({ status: "error", error: message });
@@ -535,7 +636,7 @@ export default function OneOnOnes() {
                 </h2>
                 <div className="card-list">
                   {group.items.map((item, i) => {
-                    const isEMUser = user?.contact_type === "experience_maker";
+                    const isEMUser = user?.contact_type === "experience_maker" || user?.contact_type === "team" || Boolean(user?.is_team);
                     const targetLabel = isEMUser ? item.startup_name : item.em_name;
                     const targetPhotoUrl = isEMUser ? item.startup_logo_url : item.em_photo_url;
                     const targetPath = isEMUser
@@ -1181,61 +1282,181 @@ export default function OneOnOnes() {
               transition={SPRING}
               style={{ background: "#FFFFFF", borderRadius: 20, padding: 22, width: "100%", maxWidth: 340, maxHeight: "88vh", overflowY: "auto" }}
             >
-              <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 19, color: "#2D3852", margin: "0 0 4px" }}>
-                Rate the team
-              </p>
-              <p style={{ fontSize: 12, color: "#6E7892", lineHeight: 1.5, margin: "0 0 18px" }}>
-                Before moving on, score the founding team from 1 (low) to 10 (high) on each of these.
-              </p>
+              {kpiStage === "team" ? (
+                <>
+                  <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 19, color: "#2D3852", margin: "0 0 4px" }}>
+                    Rate the team
+                  </p>
+                  <p style={{ fontSize: 12, color: "#6E7892", lineHeight: 1.5, margin: "0 0 18px" }}>
+                    Before moving on, score the founding team from 1 (low) to 10 (high) on each of these.
+                  </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {TEAM_KPIS.map((kpi) => {
-                  const value = kpiValues[kpi.key] ?? 5;
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {TEAM_KPIS.map((kpi) => {
+                      const value = kpiValues[kpi.key] ?? 5;
+                      return (
+                        <div key={kpi.key}>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", margin: 0 }}>{kpi.label}</p>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0A859B" }}>{value}</span>
+                          </div>
+                          <p style={{ fontSize: 11, color: "#6E7892", lineHeight: 1.45, margin: "0 0 8px" }}>{kpi.description}</p>
+                          <input
+                            type="range"
+                            min={1}
+                            max={10}
+                            step={1}
+                            value={value}
+                            onChange={(e) => setKpiValue(kpi.key, Number(e.target.value))}
+                            style={{ width: "100%", accentColor: "#1FD0EF" }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                (() => {
+                  const founder = kpiFounders[hardIndex];
+                  if (!founder) return null;
+                  const values = { ...DEFAULT_HARD_VALUES, ...hardValues[founder.id] };
+                  const initials = (founder.full_name || "")
+                    .split(/\s+/)
+                    .map((n) => n[0])
+                    .filter(Boolean)
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2);
+                  const showPhoto = founder.photo_url && !failedPersonPhotos[founder.id];
                   return (
-                    <div key={kpi.key}>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", margin: 0 }}>{kpi.label}</p>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0A859B" }}>{value}</span>
+                    <>
+                      <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 19, color: "#2D3852", margin: "0 0 4px" }}>
+                        Rate each founder
+                      </p>
+                      <p style={{ fontSize: 12, color: "#6E7892", lineHeight: 1.5, margin: "0 0 14px" }}>
+                        Founder {hardIndex + 1} of {kpiFounders.length}. Score their experience from 1 (low) to 10 (high).
+                      </p>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                        <div
+                          style={{
+                            width: 52,
+                            height: 52,
+                            minWidth: 52,
+                            borderRadius: 16,
+                            overflow: "hidden",
+                            background: "#EDF1F4",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#2D3852",
+                            fontWeight: 700,
+                            fontSize: 15,
+                            boxShadow: "0 3px 8px rgba(45,56,82,0.12), inset 0 0 0 1px rgba(45,56,82,0.05)",
+                          }}
+                        >
+                          {showPhoto ? (
+                            <img
+                              src={founder.photo_url}
+                              alt={founder.full_name}
+                              referrerPolicy="no-referrer"
+                              onError={() => setFailedPersonPhotos((prev) => ({ ...prev, [founder.id]: true }))}
+                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                            />
+                          ) : (
+                            initials
+                          )}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 16, color: "#2D3852", margin: 0, lineHeight: 1.2 }}>
+                            {founder.full_name}
+                          </p>
+                          {founder.tagline ? (
+                            <p style={{ fontSize: 11.5, color: "#6E7892", margin: "3px 0 0", lineHeight: 1.35 }}>{founder.tagline}</p>
+                          ) : null}
+                        </div>
                       </div>
-                      <input
-                        type="range"
-                        min={1}
-                        max={10}
-                        step={1}
-                        value={value}
-                        onChange={(e) => setKpiValue(kpi.key, Number(e.target.value))}
-                        style={{ width: "100%", accentColor: "#1FD0EF" }}
-                      />
-                    </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        {HARD_SKILLS.map((skill) => (
+                          <div key={skill.key}>
+                            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: "#2D3852", margin: 0 }}>{skill.label}</p>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "#0A859B" }}>{values[skill.key]}</span>
+                            </div>
+                            <p style={{ fontSize: 11, color: "#6E7892", lineHeight: 1.45, margin: "0 0 8px" }}>{skill.description}</p>
+                            <input
+                              type="range"
+                              min={1}
+                              max={10}
+                              step={1}
+                              value={values[skill.key]}
+                              onChange={(e) => setHardValue(founder.id, skill.key, Number(e.target.value))}
+                              style={{ width: "100%", accentColor: "#1FD0EF" }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   );
-                })}
-              </div>
+                })()
+              )}
 
               {kpiUi.error ? (
                 <p style={{ fontSize: 11, color: "#D9534F", margin: "12px 0 0" }}>{kpiUi.error}</p>
               ) : null}
 
-              <button
-                type="button"
-                onClick={submitKpiRating}
-                disabled={kpiUi.status === "sending"}
-                style={{
-                  width: "100%",
-                  marginTop: 18,
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#1FD0EF",
-                  color: "#2D3852",
-                  padding: "11px 0",
-                  fontFamily: "Fustat, sans-serif",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: kpiUi.status === "sending" ? "default" : "pointer",
-                  opacity: kpiUi.status === "sending" ? 0.65 : 1,
-                }}
-              >
-                {kpiUi.status === "sending" ? "Saving…" : "Submit"}
-              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+                {kpiStage === "hard" ? (
+                  <button
+                    type="button"
+                    onClick={handleHardBack}
+                    disabled={kpiUi.status === "sending"}
+                    style={{
+                      flex: 1,
+                      borderRadius: 12,
+                      border: "1px solid #EEF2F5",
+                      background: "#F2F8FA",
+                      color: "#6E7892",
+                      padding: "11px 0",
+                      fontFamily: "Fustat, sans-serif",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Back
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={kpiStage === "hard" ? handleHardNext : handleKpiNext}
+                  disabled={kpiUi.status === "sending"}
+                  style={{
+                    flex: 2,
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#1FD0EF",
+                    color: "#2D3852",
+                    padding: "11px 0",
+                    fontFamily: "Fustat, sans-serif",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: kpiUi.status === "sending" ? "default" : "pointer",
+                    opacity: kpiUi.status === "sending" ? 0.65 : 1,
+                  }}
+                >
+                  {kpiUi.status === "sending"
+                    ? "Saving…"
+                    : kpiStage === "team"
+                      ? kpiFounders.length > 0
+                        ? "Next"
+                        : "Submit"
+                      : hardIndex < kpiFounders.length - 1
+                        ? "Next founder"
+                        : "Submit"}
+                </button>
+              </div>
             </Motion.div>
           </Motion.div>
         ) : null}

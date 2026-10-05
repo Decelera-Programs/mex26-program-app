@@ -65,6 +65,14 @@ function normalizeContactType(raw: unknown) {
   return normalized;
 }
 
+// Experience makers run the 1:1 feedback flow. Team members can too, but only for
+// the 1:1s where they are the assigned EM (so Decelera can dry-run it); everyone
+// else's 1:1s stay invisible to them because every query filters by em_id.
+function actsAsExperienceMaker(person: { contact_type?: string | null; is_team?: boolean | null }) {
+  const type = normalizeContactType(person.contact_type);
+  return type === "experience_maker" || type === "team" || Boolean(person.is_team);
+}
+
 function toContactTypeArray(raw: unknown) {
   if (!Array.isArray(raw)) return [];
   const normalized = raw
@@ -172,9 +180,9 @@ async function resolvePersonFromAuth(auth: { sub: string; email: string }) {
 
 async function resolveAccessibleOneOnOneForPerson(
   oneOnOneId: string,
-  person: { id: string; contact_type: string | null; startup_id: string | null },
+  person: { id: string; contact_type: string | null; startup_id: string | null; is_team?: boolean | null },
 ) {
-  const isEM = normalizeContactType(person.contact_type) === "experience_maker";
+  const isEM = actsAsExperienceMaker(person);
   if (!isEM && !person.startup_id) return null;
   const whereClause = isEM
     ? { id: oneOnOneId, em_id: person.id }
@@ -1657,7 +1665,7 @@ app.get("/one-on-ones/me", async (req, res) => {
   }
 
   try {
-    const isEM = normalizeContactType(me.contact_type) === "experience_maker";
+    const isEM = actsAsExperienceMaker(me);
     const whereClause = isEM
       ? { em_id: me.id }
       : me.startup_id
@@ -1681,7 +1689,19 @@ app.get("/one-on-ones/me", async (req, res) => {
         notes: true,
         createdAt: true,
         updatedAt: true,
-        startup: { select: { id: true, name: true, logo_url: true } },
+        startup: {
+          select: {
+            id: true,
+            name: true,
+            logo_url: true,
+            // Founders, so the EM can rate each one's hard skills after a 1:1.
+            people: {
+              where: { contact_type: "founder" },
+              select: { id: true, full_name: true, photo_url: true, tagline: true },
+              orderBy: { full_name: "asc" },
+            },
+          },
+        },
         em: { select: { id: true, full_name: true, photo_url: true } },
         active_audio_url: true,
         active_audio_storage_path: true,
@@ -1715,7 +1735,7 @@ app.get("/one-on-ones/me/audio", async (req, res) => {
       return;
     }
 
-    const isEM = normalizeContactType(me.contact_type) === "experience_maker";
+    const isEM = actsAsExperienceMaker(me);
     const audioWhereClause = isEM
       ? { em_id: me.id }
       : me.startup_id
@@ -1878,8 +1898,7 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
       res.status(403).json({ error: "No person record linked to this email" });
       return;
     }
-    const contactType = normalizeContactType(me.contact_type);
-    if (contactType !== "experience_maker") {
+    if (!actsAsExperienceMaker(me)) {
       res.status(403).json({ error: "Only experience makers can submit audio." });
       return;
     }
@@ -1970,6 +1989,17 @@ const teamKpisSchema = z
   })
   .strict();
 
+const hardSkillsSchema = z.record(
+  z.string().min(1),
+  z
+    .object({
+      niche: z.number().int().min(1).max(10),
+      tech: z.number().int().min(1).max(10),
+      gtm: z.number().int().min(1).max(10),
+    })
+    .strict(),
+);
+
 // One rating per feedback submission (not per 1:1) — an EM may send several
 // audios/texts over time for the same 1:1, and each gets its own snapshot.
 app.patch("/one-on-ones/:id/audio/:submissionId", async (req, res) => {
@@ -1982,7 +2012,10 @@ app.patch("/one-on-ones/:id/audio/:submissionId", async (req, res) => {
 
     const oneOnOneId = z.string().parse(req.params.id);
     const submissionId = z.string().parse(req.params.submissionId);
-    const parsed = z.object({ team_kpis: teamKpisSchema }).strict().safeParse(req.body);
+    const parsed = z
+      .object({ team_kpis: teamKpisSchema, hard_skills: hardSkillsSchema.optional() })
+      .strict()
+      .safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid team_kpis payload", details: parsed.error.issues });
       return;
@@ -1993,7 +2026,7 @@ app.patch("/one-on-ones/:id/audio/:submissionId", async (req, res) => {
       res.status(403).json({ error: "No person record linked to this email" });
       return;
     }
-    if (normalizeContactType(me.contact_type) !== "experience_maker") {
+    if (!actsAsExperienceMaker(me)) {
       res.status(403).json({ error: "Only experience makers can rate the team." });
       return;
     }
@@ -2010,9 +2043,28 @@ app.patch("/one-on-ones/:id/audio/:submissionId", async (req, res) => {
       return;
     }
 
+    // Hard skills may only be given for founders of this 1:1's startup.
+    if (parsed.data.hard_skills) {
+      const founders = oneOnOne.startup_id
+        ? await prisma.person.findMany({
+            where: { startup_id: oneOnOne.startup_id, contact_type: "founder" },
+            select: { id: true },
+          })
+        : [];
+      const allowed = new Set(founders.map((f) => f.id));
+      const unknown = Object.keys(parsed.data.hard_skills).filter((id) => !allowed.has(id));
+      if (unknown.length > 0) {
+        res.status(400).json({ error: "hard_skills contains people who are not founders of this startup." });
+        return;
+      }
+    }
+
     const updated = await prisma.oneOnOneAudioSubmission.update({
       where: { id: submissionId },
-      data: { team_kpis: parsed.data.team_kpis },
+      data: {
+        team_kpis: parsed.data.team_kpis,
+        ...(parsed.data.hard_skills ? { hard_skills: parsed.data.hard_skills } : {}),
+      },
     });
 
     res.json(updated);
