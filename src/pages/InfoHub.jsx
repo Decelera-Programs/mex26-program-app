@@ -180,7 +180,7 @@ export default function InfoHub() {
           <div style={{ marginTop: 14, borderRadius: 12, overflow: "hidden", height: 160, position: "relative" }}>
             <iframe
               title="Hotel Mahekal Beach Resort Playa del Carmen"
-              src="https://www.google.com/maps?q=Mahekal+Beach+Resort+Playa+del+Carmen&output=embed"
+              src="https://www.google.com/maps?q=Mahekal+Beach+Resort+Playa+del+Carmen&t=k&z=17&output=embed"
               width="100%"
               height="190"
               style={{ border: 0, display: "block", marginTop: -1 }}
