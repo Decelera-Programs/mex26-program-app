@@ -11,6 +11,7 @@ const ROLE_META = {
   vc: { label: "Investor", dot: "var(--dc-role-vc, #5e6aa0)" },
   team: { label: "Team", dot: "var(--dc-role-team, #98a0b3)" },
   alumni: { label: "Alumni", dot: "var(--dc-role-founder, #c77b4a)" },
+  guest: { label: "Guest", dot: "var(--dc-role-guest, #8fa3b8)" },
 };
 
 export default function PersonCard({ person, index = 0 }) {

@@ -171,6 +171,7 @@ function normalizeContactType(raw) {
   if (normalized === "vc") return "vc";
   if (normalized === "team") return "team";
   if (normalized === "alumni") return "alumni";
+  if (normalized === "guest") return "guest";
   return normalized;
 }
 

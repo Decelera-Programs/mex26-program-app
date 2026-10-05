@@ -16,6 +16,7 @@ const contactTypeColors = {
   vc: "#B9C1D4",
   alumni: "#FFB950",
   founder: "#4EA72E",
+  guest: "#8FA3B8",
 };
 
 const contactTypeLabels = {
@@ -24,6 +25,7 @@ const contactTypeLabels = {
   vc: "VC",
   alumni: "Alumni",
   founder: "Founder",
+  guest: "Guest",
 };
 
 function toExternalWebsiteUrl(rawUrl) {

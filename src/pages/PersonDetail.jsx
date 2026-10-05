@@ -16,6 +16,7 @@ const typeLabels = {
   vc: "VC / Investor",
   alumni: "Alumni",
   founder: "Founder",
+  guest: "Guest",
 };
 
 // Same role palette as PersonCard's ROLE_META, so the accent stays consistent
@@ -26,6 +27,7 @@ const typeColors = {
   vc: "#5e6aa0",
   team: "#98a0b3",
   alumni: "#c77b4a",
+  guest: "#8fa3b8",
 };
 
 function initialsOf(name) {

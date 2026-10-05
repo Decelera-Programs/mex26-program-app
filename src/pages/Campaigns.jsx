@@ -35,6 +35,7 @@ const CONTACT_TYPES = [
   { key: "founder", label: "Founders" },
   { key: "vc", label: "Investors" },
   { key: "team", label: "Team" },
+  { key: "guest", label: "Guests" },
   { key: "lp", label: "LP" },
 ];
 
