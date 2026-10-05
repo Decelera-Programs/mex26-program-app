@@ -161,7 +161,7 @@ stored in the DB is shown verbatim to every attendee regardless of their device 
 published México schedule as-is; no offset math. `src/lib/dateTime.js` intentionally does not apply a
 timezone when formatting event times.
 
-"What day is it now" / on-site presence checks resolve against `America/Mexico_City`
+"What day is it now" / on-site presence checks resolve against `America/Cancun`
 (`PROGRAM_TIMEZONE` on the frontend, `AUDIENCE_TIMEZONE` / `MATCHING_TIMEZONE` on the backend).
 
 ## PWA & offline

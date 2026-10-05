@@ -1705,15 +1705,20 @@ app.get("/one-on-ones/me", async (req, res) => {
         em: { select: { id: true, full_name: true, photo_url: true } },
         active_audio_url: true,
         active_audio_storage_path: true,
+        // Only used to tell whether this 1:1 was already rated (see has_rating below).
+        audioSubmissions: { select: { team_kpis: true } },
       },
       orderBy: { start_time: "asc" },
     });
     // Expose only whether an audio exists (Home's "1:1s without audio" badge),
     // so the client doesn't need one signed-URL request per 1:1 for it.
     res.json(
-      records.map(({ active_audio_url, active_audio_storage_path, ...record }) => ({
+      records.map(({ active_audio_url, active_audio_storage_path, audioSubmissions, ...record }) => ({
         ...record,
         has_active_audio: Boolean(active_audio_url || active_audio_storage_path),
+        // The EM rates the team (and founders) once per 1:1: only the first
+        // feedback sent for it opens the rating modal.
+        has_rating: audioSubmissions.some((submission) => submission.team_kpis != null),
       })),
     );
   } catch (error) {

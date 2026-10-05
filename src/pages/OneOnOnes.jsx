@@ -94,6 +94,7 @@ export default function OneOnOnes() {
   const [kpiPrompt, setKpiPrompt] = useState(null); // { oneOnOneId, submissionId } | null
   const [kpiValues, setKpiValues] = useState({});
   const [kpiUi, setKpiUi] = useState({});
+  const ratedMeetingsRef = useRef(new Set()); // 1:1s rated during this session
   const [kpiStage, setKpiStage] = useState("team"); // "team" | "hard"
   const [hardValues, setHardValues] = useState({}); // founderId -> { niche, tech, gtm }
   const [hardIndex, setHardIndex] = useState(0);
@@ -453,7 +454,7 @@ export default function OneOnOnes() {
         ...prev,
         [oneOnOneId]: { ...prev[oneOnOneId], status: "success", error: "" },
       }));
-      openKpiPrompt(oneOnOneId, created.id);
+      if (!isMeetingRated(oneOnOneId)) openKpiPrompt(oneOnOneId, created.id);
       // Refresh in the background — it re-signs every past attempt's playback
       // URL, which only matters once they reopen this card, not for "Sent".
       getOneOnOneAudio(oneOnOneId)
@@ -501,7 +502,7 @@ export default function OneOnOnes() {
       const created = await registerOneOnOneAudioSubmission(oneOnOneId, { status: "transcribed", transcript_text: text });
       setTextByMeeting((prev) => ({ ...prev, [oneOnOneId]: "" }));
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "success" } }));
-      openKpiPrompt(oneOnOneId, created.id);
+      if (!isMeetingRated(oneOnOneId)) openKpiPrompt(oneOnOneId, created.id);
       getOneOnOneAudio(oneOnOneId)
         .then((refreshed) => setAudioDataByMeeting((prev) => ({ ...prev, [oneOnOneId]: refreshed })))
         .catch(() => {});
@@ -509,6 +510,11 @@ export default function OneOnOnes() {
       const message = error instanceof Error ? error.message : "Could not send feedback.";
       setTextUiByMeeting((prev) => ({ ...prev, [oneOnOneId]: { status: "error", error: message } }));
     }
+  }
+
+  // The rating modal only follows the first feedback sent for each 1:1.
+  function isMeetingRated(oneOnOneId) {
+    return ratedMeetingsRef.current.has(oneOnOneId) || Boolean(items.find((item) => item.id === oneOnOneId)?.has_rating);
   }
 
   function openKpiPrompt(oneOnOneId, submissionId) {
@@ -576,6 +582,8 @@ export default function OneOnOnes() {
         { ...DEFAULT_KPI_VALUES, ...kpiValues },
         hardSkills,
       );
+      ratedMeetingsRef.current.add(kpiPrompt.oneOnOneId);
+      setItems((prev) => prev.map((item) => (item.id === kpiPrompt.oneOnOneId ? { ...item, has_rating: true } : item)));
       setKpiPrompt(null);
       setKpiValues({});
       setKpiUi({});
