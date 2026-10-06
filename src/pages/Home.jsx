@@ -3,7 +3,7 @@ import { getCurrentUser, getHomeDailyContent, getMyMatches, listEvents, listMyOn
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
-import { CalendarDays, ChevronRight, MapPin, Users } from "lucide-react";
+import { CalendarDays, Camera, ChevronRight, MapPin, Users } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, daysSinceProgramStart, getTodayKey, programNow } from "../lib/dateTime";
@@ -115,6 +115,12 @@ export default function Home() {
     });
   };
   const [myOneOnOnesWithoutAudio, setMyOneOnOnesWithoutAudio] = useState(0);
+  // Re-evaluated every 30s so the "Happening now" card appears/disappears on its own.
+  const [nowTick, setNowTick] = useState(() => programNow().getTime());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(programNow().getTime()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,6 +257,19 @@ export default function Home() {
     ? todaysEvents.slice(nextEventIndex + 1, nextEventIndex + 4)
     : [];
   const hasMoreUpcomingEvents = nextEventIndex >= 0 && todaysEvents.length > nextEventIndex + 4;
+
+  // Event times are naive Mexico wall clock and nowTick is too, so they compare directly.
+  const liveEvents = useMemo(() => {
+    return events
+      .map((event) => {
+        const start = parseEventDate(getEventStart(event))?.getTime();
+        const end = parseEventDate(event?.end_time || event?.endTime)?.getTime();
+        return start != null && end != null && start <= nowTick && nowTick < end ? { event, start, end } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+  }, [events, nowTick]);
+  const liveNow = liveEvents[0] || null;
 
   function formatHour(rawDate) {
     const dt = parseEventDate(rawDate);
@@ -439,6 +458,23 @@ export default function Home() {
         ) : null}
         </AnimatePresence>
 
+        <AnimatePresence>
+        {liveNow ? (
+          <GrowIn key="live-now-grow">
+            <LiveNowCard
+              event={liveNow.event}
+              start={liveNow.start}
+              end={liveNow.end}
+              nowMs={nowTick}
+              extra={liveEvents.length - 1}
+              formatHour={formatHour}
+              accent={getEventDotColor(liveNow.event.type)}
+              onClick={() => navigate(`/schedule?event=${encodeURIComponent(liveNow.event.id)}`)}
+            />
+          </GrowIn>
+        ) : null}
+        </AnimatePresence>
+
         <button
           type="button"
           onClick={() => navigate("/schedule")}
@@ -524,9 +560,121 @@ export default function Home() {
           onClick={() => navigate("/people", { state: { todayOnly: true } })}
         />
 
+        <MomentsCard onClick={() => navigate("/media-kit")} />
+
         <SponsorsSection />
       </div>
     </div>
+  );
+}
+
+// Accent per event type (same colours as the schedule dots) -> gradient + text colours.
+function liveCardTheme(accent) {
+  switch (accent) {
+    case "#1FD0EF": return { from: "#1FD0EF", to: "#0A859B", fg: "#FFFFFF", muted: "rgba(255,255,255,0.78)" };
+    case "#4EA72E": return { from: "#6DBE45", to: "#2F7D1C", fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)" };
+    case "#2D3852": return { from: "#3A4B6A", to: "#1A2235", fg: "#FFFFFF", muted: "rgba(255,255,255,0.7)" };
+    case "#0A859B": return { from: "#12A5BD", to: "#0A6C80", fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)" };
+    case "#FFB950": return { from: "#FFD27A", to: "#FFB950", fg: "#2D3852", muted: "rgba(45,56,82,0.7)" };
+    default:        return { from: "#8A94AD", to: "#4A5573", fg: "#FFFFFF", muted: "rgba(255,255,255,0.75)" };
+  }
+}
+
+function LiveNowCard({ event, start, end, nowMs, extra, formatHour, accent, onClick }) {
+  const t = liveCardTheme(accent);
+  const progress = Math.min(1, Math.max(0, (nowMs - start) / Math.max(1, end - start)));
+  const minutesLeft = Math.max(1, Math.ceil((end - nowMs) / 60000));
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px]"
+      style={{
+        background: `linear-gradient(135deg, ${t.from} 0%, ${t.to} 100%)`,
+        color: t.fg,
+        border: "none",
+        boxShadow: `0 12px 30px ${t.to}40`,
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span
+          className="inline-flex items-center gap-[7px] uppercase rounded-full px-[10px] py-[4px]"
+          style={{ fontSize: "9.5px", letterSpacing: "0.14em", fontWeight: 700, background: "rgba(255,255,255,0.2)" }}
+        >
+          <span
+            className="live-dot"
+            aria-hidden="true"
+            style={{ width: 7, height: 7, borderRadius: "9999px", background: t.fg, display: "inline-block" }}
+          />
+          Happening now
+        </span>
+        <ChevronRight size={16} color={t.fg} style={{ opacity: 0.7 }} />
+      </div>
+
+      <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 21, lineHeight: 1.15, margin: "12px 0 0", color: t.fg }}>
+        {event.title}
+      </p>
+      <div className="flex items-center gap-[8px] min-w-0" style={{ marginTop: 6, fontSize: "11.5px", color: t.muted }}>
+        <span style={{ whiteSpace: "nowrap" }}>
+          {formatHour(event.start_time || event.startTime)} – {formatHour(event.end_time || event.endTime)}
+        </span>
+        {event.location ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <MapPin size={11} color={t.muted} style={{ flexShrink: 0 }} />
+            <span className="truncate">{event.location}</span>
+          </>
+        ) : null}
+      </div>
+
+      <div style={{ marginTop: 12, height: 4, borderRadius: 9999, background: "rgba(255,255,255,0.25)", overflow: "hidden" }}>
+        <div style={{ width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 9999, background: t.fg, opacity: 0.9 }} />
+      </div>
+      <div className="flex items-center justify-between" style={{ marginTop: 6, fontSize: "10.5px", color: t.muted }}>
+        <span>{minutesLeft} min left</span>
+        {extra > 0 ? <span>+{extra} more on now</span> : null}
+      </div>
+      <style>{`@keyframes liveDotPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } } .live-dot { animation: liveDotPulse 1.6s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }`}</style>
+    </button>
+  );
+}
+
+function MomentsCard({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative overflow-hidden w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(255,153,80,0.25)]"
+      style={{
+        background: "linear-gradient(135deg, #FFF1D6 0%, #FFD9A8 55%, #FFC48A 100%)",
+        border: "none",
+        boxShadow: "0 8px 22px rgba(255,153,80,0.18)",
+      }}
+    >
+      <div
+        className="decelera-mx-mark pointer-events-none absolute"
+        style={{ right: -34, bottom: -42, height: 150, width: 150, color: "#2D3852", opacity: 0.12 }}
+      >
+        <DeceleraRosetteMark />
+      </div>
+      <div className="relative flex items-center gap-[12px]">
+        <div
+          className="w-[38px] h-[38px] rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: "#2D3852" }}
+        >
+          <Camera size={18} color="#FFD9A8" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#2D3852", margin: 0 }}>
+            Moments
+          </p>
+          <p style={{ fontSize: "11px", color: "#6B4700", margin: "3px 0 0" }}>
+            Photos &amp; stories from every day
+          </p>
+        </div>
+        <ChevronRight size={16} color="#2D3852" style={{ opacity: 0.6 }} />
+      </div>
+    </button>
   );
 }
 
