@@ -369,6 +369,13 @@ export async function listStartups() {
   return staleWhileRevalidate(startupsCache, () => api("/startups").then((startups) => (Array.isArray(startups) ? startups.map(normalizeStartup) : [])));
 }
 
+// Short-lived signed URL of the startup's one pager (experience makers, VCs and the
+// team only; the backend answers 403 to everyone else).
+export async function getStartupOnePagerUrl(id) {
+  const res = await api(`/startups/${encodeURIComponent(id)}/one-pager`);
+  return res?.url || null;
+}
+
 export async function getStartupById(id) {
   const startups = await listStartups();
   return startups.find((startup) => startup.id === id) || null;

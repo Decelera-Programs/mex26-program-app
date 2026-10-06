@@ -5,6 +5,7 @@ import compression from "compression";
 import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { ONE_PAGER_BUCKET, canSeeOnePager, resolveOnePager } from "./lib/onePager.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
 import { prisma } from "./db.js";
@@ -2311,7 +2312,9 @@ app.post("/push/unsubscribe", async (req, res) => {
 
 // Matching-only columns: the embedding is ~30 KB per startup and `challenges`
 // is the raw application form; no client renders either.
-const STARTUP_INTERNAL_FIELDS = { challenge_embedding: true, challenges: true } as const;
+// `one_pager_url` is a private-bucket path served only by GET /startups/:id/one-pager
+// (role-checked), so it is never part of the list/detail payloads.
+const STARTUP_INTERNAL_FIELDS = { challenge_embedding: true, challenges: true, one_pager_url: true } as const;
 
 app.get("/people", async (req, res) => {
   const q = z.string().optional().parse(req.query.q);
@@ -2374,6 +2377,36 @@ app.get("/startups/:id", async (req, res) => {
     return;
   }
   res.json(startup);
+});
+app.get("/startups/:id/one-pager", async (req, res) => {
+  try {
+    const id = z.string().parse(req.params.id);
+    const auth = (req as AuthenticatedRequest).auth;
+    const person = auth?.email && auth?.sub ? await resolvePersonFromAuth(auth) : null;
+    if (!canSeeOnePager(person)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const startup = await prisma.startup.findUnique({ where: { id }, select: { one_pager_url: true } });
+    if (!startup) {
+      res.status(404).json({ error: "Startup not found" });
+      return;
+    }
+    const result = await resolveOnePager({
+      person,
+      storedPath: startup.one_pager_url,
+      sign: async (path, ttl) => {
+        const admin = getSupabaseAdmin();
+        if (!admin) return null;
+        const { data, error } = await admin.storage.from(ONE_PAGER_BUCKET).createSignedUrl(path, ttl);
+        return error ? null : data.signedUrl;
+      },
+    });
+    res.set("Cache-Control", "no-store");
+    res.status(result.status).json(result.body);
+  } catch {
+    res.status(500).json({ error: "Could not load one pager" });
+  }
 });
 app.get("/events/:eventId/people", async (req, res) => {
   try {

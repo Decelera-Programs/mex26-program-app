@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Globe, Building2, Users, FileText } from "lucide-react";
 import { motion as Motion } from "framer-motion";
-import { getCurrentUser, listPeople, listStartups } from "../api/dataService";
+import { getCurrentUser, getStartupOnePagerUrl, listPeople, listStartups } from "../api/dataService";
 import UserNotRegisteredError from "./UserNotRegisteredError";
 import LoadingState from "../components/LoadingState";
 import DeceleraRosetteMark from "../components/DeceleraRosetteMark";
@@ -57,6 +57,24 @@ export default function StartupDetail() {
   const [loading, setLoading] = useState(true);
   const [startupLogoFailed, setStartupLogoFailed] = useState(false);
   const [logoOpen, setLogoOpen] = useState(false);
+  const [onePagerState, setOnePagerState] = useState("idle"); // idle | loading | error
+
+  // The URL is signed per request and only handed to experience makers, VCs and team.
+  async function openOnePager() {
+    if (onePagerState === "loading") return;
+    setOnePagerState("loading");
+    const tab = window.open("", "_blank"); // opened synchronously so mobile browsers don't block it
+    try {
+      const url = await getStartupOnePagerUrl(startup.id);
+      if (!url) throw new Error("No one pager");
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+      setOnePagerState("idle");
+    } catch {
+      if (tab) tab.close();
+      setOnePagerState("error");
+    }
+  }
 
   useEffect(() => {
     if (!logoOpen) return;
@@ -359,7 +377,7 @@ export default function StartupDetail() {
               </div>
             )}
 
-            {startup.one_pager_url && (user?.contact_type === "experience_maker" || user?.contact_type === "team" || user?.contact_type === "vc") && (
+            {(user?.contact_type === "experience_maker" || user?.contact_type === "team" || user?.contact_type === "vc") && (
               <div className="rounded-[20px] border px-[18px] pt-[16px] pb-[14px]" style={{ background: "#FFFFFF", borderColor: "#EEF2F5" }}>
                 <div className="flex items-center gap-[10px] mb-[12px]">
                   <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center" style={{ background: "#1FD0EF" }}>
@@ -367,12 +385,12 @@ export default function StartupDetail() {
                   </div>
                   <p style={{ fontSize: "14px", fontWeight: 600, color: "#2D3852" }}>Documents</p>
                 </div>
-                <a
-                  href={startup.one_pager_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-[14px] px-[14px] py-[12px] flex items-center gap-[10px] transition-all duration-200 hover:-translate-y-[1px] active:opacity-70"
-                  style={{ background: "#F2F8FA", textDecoration: "none", display: "flex" }}
+                <button
+                  type="button"
+                  onClick={openOnePager}
+                  disabled={onePagerState === "loading"}
+                  className="w-full text-left rounded-[14px] px-[14px] py-[12px] flex items-center gap-[10px] transition-all duration-200 hover:-translate-y-[1px] active:opacity-70"
+                  style={{ background: "#F2F8FA", textDecoration: "none", display: "flex", border: "none", cursor: "pointer" }}
                 >
                   <div
                     className="flex items-center justify-center flex-shrink-0"
@@ -382,10 +400,10 @@ export default function StartupDetail() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p style={{ fontSize: "13px", fontWeight: 600, color: "#2D3852", lineHeight: 1.2 }}>One Pager</p>
-                    <p style={{ fontSize: "11px", color: "#6E7892", marginTop: 2 }}>Tap to open PDF</p>
+                    <p style={{ fontSize: "11px", color: onePagerState === "error" ? "#C0392B" : "#6E7892", marginTop: 2 }}>{onePagerState === "loading" ? "Opening…" : onePagerState === "error" ? "Not available, try again" : "Tap to open PDF"}</p>
                   </div>
                   <Globe size={14} color="#B9C1D4" style={{ flexShrink: 0 }} />
-                </a>
+                </button>
               </div>
             )}
           </div>
