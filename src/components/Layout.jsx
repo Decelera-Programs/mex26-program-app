@@ -5,6 +5,7 @@ import { motion as Motion, AnimatePresence } from "framer-motion";
 import LoadingState from "./LoadingState";
 import EventDetailsModal from "./EventDetailsModal";
 import PushNotificationPrompt from "./PushNotificationPrompt";
+import TalkFeedbackModal from "./TalkFeedbackModal";
 import { getCurrentUser, listNotificationsForUser, markNotificationRead, signOut, unsubscribePush } from "../api/dataService";
 import { supabase } from "../lib/supabaseClient";
 import { DUR, EASE } from "../lib/motion";
@@ -511,6 +512,7 @@ export default function Layout() {
       </div>
       <PushNotificationPrompt />
       <EventDetailsModal eventId={eventModalId} onClose={closeEventModal} />
+      <TalkFeedbackModal />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { ONE_PAGER_BUCKET, canSeeOnePager, resolveOnePager } from "./lib/onePager.js";
+import { isRateable, isValidRating, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
 import { prisma } from "./db.js";
@@ -2408,6 +2409,92 @@ app.get("/startups/:id/one-pager", async (req, res) => {
     res.status(500).json({ error: "Could not load one pager" });
   }
 });
+// Talk ratings (1-10) live in Person.schedule_feedback as { "<event id>": rating },
+// appended one key per answered talk. Raw SQL on purpose: the append is a single
+// atomic jsonb concat (two quick submits can't overwrite each other) and the column
+// stays out of the Prisma model, so no unscoped Person query can ever return it.
+const SCHEDULE_FEEDBACK_AS_OBJECT = Prisma.sql`(CASE WHEN jsonb_typeof(schedule_feedback) = 'object' THEN schedule_feedback ELSE '{}'::jsonb END)`;
+
+async function feedbackPerson(req: Request) {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) return null;
+  return resolvePersonFromAuth(auth);
+}
+
+const feedbackEventSelect = {
+  id: true,
+  title: true,
+  location: true,
+  type: true,
+  start_time: true,
+  end_time: true,
+  visible_to_contact_types: true,
+} as const;
+
+// Talks that already ended, that this person may see and has not rated yet (oldest first).
+app.get("/events/feedback/pending", async (req, res) => {
+  try {
+    const person = await feedbackPerson(req);
+    if (!person) {
+      res.status(403).json({ error: "No person record linked to this account" });
+      return;
+    }
+    const contactType = normalizeContactType(person.contact_type);
+    const now = new Date();
+    const [events, rows] = await Promise.all([
+      prisma.event.findMany({ where: { end_time: { lte: now } }, select: feedbackEventSelect }),
+      prisma.$queryRaw<{ schedule_feedback: unknown }[]>(
+        Prisma.sql`SELECT schedule_feedback FROM "Person" WHERE id = ${person.id}::uuid`,
+      ),
+    ]);
+    const pending = pendingTalks(events, rows[0]?.schedule_feedback ?? null, now, (e) =>
+      isEventVisibleForContactType(e, contactType),
+    );
+    res.set("Cache-Control", "no-store");
+    res.json(
+      pending.map((e) => ({ id: e.id, title: e.title, location: e.location, start_time: e.start_time, end_time: e.end_time })),
+    );
+  } catch {
+    res.status(500).json({ error: "Could not load pending feedback" });
+  }
+});
+
+app.post("/events/:eventId/feedback", async (req, res) => {
+  try {
+    const eventId = z.string().uuid().safeParse(req.params.eventId);
+    const rating = (req.body as { rating?: unknown } | undefined)?.rating;
+    if (!eventId.success || !isValidRating(rating)) {
+      res.status(400).json({ error: "rating must be an integer from 1 to 10" });
+      return;
+    }
+    const person = await feedbackPerson(req);
+    if (!person) {
+      res.status(403).json({ error: "No person record linked to this account" });
+      return;
+    }
+    const event = await prisma.event.findUnique({ where: { id: eventId.data }, select: feedbackEventSelect });
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+    const contactType = normalizeContactType(person.contact_type);
+    if (!isRateable(event, new Date(), (e) => isEventVisibleForContactType(e, contactType))) {
+      res.status(403).json({ error: "This talk cannot be rated" });
+      return;
+    }
+    // Only the first answer for a talk is kept: the WHERE skips people who already have the key.
+    const updated = await prisma.$executeRaw(Prisma.sql`
+      UPDATE "Person"
+      SET schedule_feedback = ${SCHEDULE_FEEDBACK_AS_OBJECT} || jsonb_build_object(${event.id}::text, ${rating}::int)
+      WHERE id = ${person.id}::uuid
+        AND NOT jsonb_exists(${SCHEDULE_FEEDBACK_AS_OBJECT}, ${event.id}::text)`);
+    res.set("Cache-Control", "no-store");
+    res.json({ saved: updated > 0, already_answered: updated === 0 });
+  } catch {
+    res.status(500).json({ error: "Could not save feedback" });
+  }
+});
+
 app.get("/events/:eventId/people", async (req, res) => {
   try {
     const eventId = z.string().parse(req.params.eventId);

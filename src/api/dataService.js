@@ -315,6 +315,20 @@ export async function listEvents() {
   return staleWhileRevalidate(eventsCache, () => api("/events").then((events) => events.map(normalizeEvent)));
 }
 
+// Talks that already ended and that this user hasn't rated yet, oldest first.
+export async function listPendingTalkFeedback() {
+  const talks = await api("/events/feedback/pending");
+  return Array.isArray(talks) ? talks : [];
+}
+
+// rating: integer 1-10. The backend keeps only the first answer for each talk.
+export async function submitTalkFeedback(eventId, rating) {
+  return api(`/events/${encodeURIComponent(eventId)}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({ rating }),
+  });
+}
+
 // { today: match | null, pending: match[] } — `pending` are recent matches the
 // user hasn't rated yet, shown as follow-up cards until they give feedback.
 export async function getMyMatches() {
