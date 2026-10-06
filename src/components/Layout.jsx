@@ -105,16 +105,17 @@ export default function Layout() {
 
     async function init() {
       try {
-        const me = await getCurrentUser();
+        // Independent of each other: one round trip instead of three in a row.
+        const [me, notifs, sessionResult] = await Promise.all([
+          getCurrentUser(),
+          listNotificationsForUser().catch(() => []),
+          supabase ? supabase.auth.getSession() : Promise.resolve(null),
+        ]);
         if (cancelled || !me?.email) return;
         setCurrentUser(me);
+        setUnreadCount(notifs.filter((n) => !n.is_read).length);
 
-        const notifs = await listNotificationsForUser(me.email);
-        if (!cancelled) setUnreadCount(notifs.filter((n) => !n.is_read).length);
-
-        if (!supabase) return;
-        const { data: { session } } = await supabase.auth.getSession();
-        const authUserId = session?.user?.id;
+        const authUserId = sessionResult?.data?.session?.user?.id;
         if (!authUserId || cancelled) return;
 
         channel = supabase

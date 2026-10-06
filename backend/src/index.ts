@@ -2543,18 +2543,40 @@ app.get("/users/:userId/schedule", async (req, res) => {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
-
-    const joins = await prisma.userEvent.findMany({
-      where: { user_id: person.id },
-      include: { event: true },
-      orderBy: { event: { start_time: "asc" } },
-    });
-    const contactType = normalizeContactType(person.contact_type);
-    const visibleEvents = joins
-      .map((j) => j.event)
-      .filter((event) => isEventVisibleForContactType(event, contactType));
-    res.json(visibleEvents);
+    res.json(await loadScheduleForPerson(person));
   } catch (error) {
+    res.status(500).json({ error: "Failed to load user schedule" });
+  }
+});
+
+async function loadScheduleForPerson(person: { id: string; contact_type: string | null }) {
+  const joins = await prisma.userEvent.findMany({
+    where: { user_id: person.id },
+    include: { event: true },
+    orderBy: { event: { start_time: "asc" } },
+  });
+  const contactType = normalizeContactType(person.contact_type);
+  return joins
+    .map((j) => j.event)
+    .filter((event) => isEventVisibleForContactType(event, contactType));
+}
+
+// Same as /users/:userId/schedule for the caller, without the client having to
+// resolve its own id first (saves a round trip).
+app.get("/me/schedule", async (req, res) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const person = await resolvePersonFromAuth(auth);
+    if (!person) {
+      res.status(403).json({ error: "No person record linked to this email" });
+      return;
+    }
+    res.json(await loadScheduleForPerson(person));
+  } catch {
     res.status(500).json({ error: "Failed to load user schedule" });
   }
 });
@@ -2576,9 +2598,35 @@ async function requireSelf(req: Request, res: Response, userId: string) {
   return person;
 }
 
+// The caller's own person, or null (after sending 401/403).
+async function requireMe(req: Request, res: Response) {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const person = await resolvePersonFromAuth(auth);
+  if (!person) {
+    res.status(403).json({ error: "Forbidden" });
+    return null;
+  }
+  return person;
+}
+
 app.get("/users/:userId/notifications", async (req, res) => {
   const me = await requireSelf(req, res, z.string().parse(req.params.userId));
   if (!me) return;
+  await sendNotificationsFor(me, req, res);
+});
+
+// Same as /users/:userId/notifications for the caller (no id round trip).
+app.get("/me/notifications", async (req, res) => {
+  const me = await requireMe(req, res);
+  if (!me) return;
+  await sendNotificationsFor(me, req, res);
+});
+
+async function sendNotificationsFor(me: { id: string }, req: Request, res: Response) {
   const userId = me.id;
   const unread = z
     .enum(["true", "false"])
@@ -2622,7 +2670,7 @@ app.get("/users/:userId/notifications", async (req, res) => {
     const message = error instanceof Error ? error.message : "Failed to load notifications";
     res.status(500).json({ error: message });
   }
-});
+}
 
 app.patch("/notifications/:notificationId/read", async (req, res) => {
   const notificationId = z.string().parse(req.params.notificationId);
@@ -2656,6 +2704,16 @@ app.patch("/notifications/:notificationId/read", async (req, res) => {
 app.patch("/users/:userId/notifications/read-all", async (req, res) => {
   const me = await requireSelf(req, res, z.string().parse(req.params.userId));
   if (!me) return;
+  await markAllReadFor(me, res);
+});
+
+app.patch("/me/notifications/read-all", async (req, res) => {
+  const me = await requireMe(req, res);
+  if (!me) return;
+  await markAllReadFor(me, res);
+});
+
+async function markAllReadFor(me: { id: string }, res: Response) {
   const userId = me.id;
   try {
     const result = await prisma.notification.updateMany({
@@ -2674,7 +2732,7 @@ app.patch("/users/:userId/notifications/read-all", async (req, res) => {
     const message = error instanceof Error ? error.message : "Failed to mark all notifications read";
     res.status(500).json({ error: message });
   }
-});
+}
 
 app.post("/jobs/notifications/30min", requireJobsApiKey, async (_req, res) => {
   const result = await triggerThirtyMinuteReminders(new Date());

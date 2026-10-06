@@ -396,24 +396,28 @@ export async function getStartupById(id) {
   return startups.find((startup) => startup.id === id) || null;
 }
 
-export async function listUserScheduleEvents(userEmail) {
+// Try the caller-scoped /me/... endpoint (one round trip); if the backend is
+// older and doesn't have it yet (404), fall back to the /users/:id/... one.
+async function apiForSelf(mePath, userPath, init) {
+  try {
+    return await api(mePath, init);
+  } catch (error) {
+    if (!String(error?.message || "").startsWith("API 404")) throw error;
+  }
   const me = await getCurrentUser();
-  const userIdentifier = me?.id || userEmail;
-  if (!userIdentifier) return [];
-  const userId = await resolveUserId(userIdentifier);
-  if (!userId) return [];
-  const events = await api(`/users/${encodeURIComponent(userId)}/schedule`);
-  return events.map(normalizeEvent);
+  const userId = me?.id ? await resolveUserId(me.id) : "";
+  if (!userId) return null;
+  return api(userPath(userId), init);
 }
 
-export async function listNotificationsForUser(userEmail) {
-  const me = await getCurrentUser();
-  const userIdentifier = me?.id || userEmail;
-  if (!userIdentifier) return [];
-  const userId = await resolveUserId(userIdentifier);
-  if (!userId) return [];
-  const notifications = await api(`/users/${encodeURIComponent(userId)}/notifications`);
-  return notifications.map(normalizeNotification);
+export async function listUserScheduleEvents() {
+  const events = await apiForSelf("/me/schedule", (id) => `/users/${encodeURIComponent(id)}/schedule`);
+  return Array.isArray(events) ? events.map(normalizeEvent) : [];
+}
+
+export async function listNotificationsForUser() {
+  const notifications = await apiForSelf("/me/notifications", (id) => `/users/${encodeURIComponent(id)}/notifications`);
+  return Array.isArray(notifications) ? notifications.map(normalizeNotification) : [];
 }
 
 export async function markNotificationRead(notificationId) {
@@ -422,15 +426,12 @@ export async function markNotificationRead(notificationId) {
   });
 }
 
-export async function markAllNotificationsReadForUser(userEmail) {
-  const me = await getCurrentUser();
-  const userIdentifier = me?.id || userEmail;
-  if (!userIdentifier) return;
-  const userId = await resolveUserId(userIdentifier);
-  if (!userId) return;
-  await api(`/users/${encodeURIComponent(userId)}/notifications/read-all`, {
-    method: "PATCH",
-  });
+export async function markAllNotificationsReadForUser() {
+  await apiForSelf(
+    "/me/notifications/read-all",
+    (id) => `/users/${encodeURIComponent(id)}/notifications/read-all`,
+    { method: "PATCH" },
+  );
 }
 
 export async function getPushPublicKey() {
