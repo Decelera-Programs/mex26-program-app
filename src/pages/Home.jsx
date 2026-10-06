@@ -630,30 +630,30 @@ function MomentsCard({ onClick }) {
       type="button"
       onClick={onClick}
       className="relative overflow-hidden w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
-      style={{ background: "#1158E5", border: "none" }}
+      style={{ background: "#FAF3DC", border: "none" }}
     >
       <div
         className="decelera-mx-mark pointer-events-none absolute"
-        style={{ right: -34, bottom: -42, height: 150, width: 150, color: "#F2F8FA", opacity: 0.14 }}
+        style={{ right: -34, bottom: -42, height: 150, width: 150, color: "#2D3852", opacity: 0.1 }}
       >
         <DeceleraRosetteMark />
       </div>
       <div className="relative flex items-center gap-[12px]">
         <div
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "#1FD0EF" }}
+          style={{ background: "#FFB950" }}
         >
           <Camera size={18} color="#2D3852" />
         </div>
         <div className="min-w-0 flex-1">
-          <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#F2F8FA", margin: 0 }}>
+          <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#2D3852", margin: 0 }}>
             Moments
           </p>
-          <p style={{ fontSize: "11px", color: "rgba(242,248,250,0.78)", margin: "3px 0 0" }}>
+          <p style={{ fontSize: "11px", color: "rgba(45,56,82,0.7)", margin: "3px 0 0" }}>
             Photos &amp; stories from every day
           </p>
         </div>
-        <ChevronRight size={16} color="#F2F8FA" style={{ opacity: 0.7 }} />
+        <ChevronRight size={16} color="#2D3852" style={{ opacity: 0.6 }} />
       </div>
     </button>
   );
