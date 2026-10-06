@@ -24,6 +24,16 @@ export function isValidRating(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= MIN_RATING && value <= MAX_RATING;
 }
 
+// What the client may send: a rating, or { didnt_watch: true } to skip the talk. A skipped
+// talk is stored as null (it counts as answered so it is not asked again, and it is ignored
+// in averages).
+export function parseFeedbackBody(body: unknown): { ok: true; value: number | null } | { ok: false } {
+  const b = (body && typeof body === "object" ? body : {}) as { rating?: unknown; didnt_watch?: unknown };
+  if (b.didnt_watch === true && b.rating === undefined) return { ok: true, value: null };
+  if (b.didnt_watch === undefined && isValidRating(b.rating)) return { ok: true, value: b.rating };
+  return { ok: false };
+}
+
 // schedule_feedback may be null or (legacy rows) something other than an object.
 export function answeredEventIds(feedback: unknown): Set<string> {
   if (!feedback || typeof feedback !== "object" || Array.isArray(feedback)) return new Set();

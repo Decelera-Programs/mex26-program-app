@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { ONE_PAGER_BUCKET, canSeeOnePager, resolveOnePager } from "./lib/onePager.js";
-import { isRateable, isValidRating, pendingTalks } from "./lib/talkFeedback.js";
+import { isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
 import { prisma } from "./db.js";
@@ -2462,9 +2462,9 @@ app.get("/events/feedback/pending", async (req, res) => {
 app.post("/events/:eventId/feedback", async (req, res) => {
   try {
     const eventId = z.string().uuid().safeParse(req.params.eventId);
-    const rating = (req.body as { rating?: unknown } | undefined)?.rating;
-    if (!eventId.success || !isValidRating(rating)) {
-      res.status(400).json({ error: "rating must be an integer from 1 to 10" });
+    const body = parseFeedbackBody(req.body);
+    if (!eventId.success || !body.ok) {
+      res.status(400).json({ error: "send an integer rating from 1 to 10, or { didnt_watch: true }" });
       return;
     }
     const person = await feedbackPerson(req);
@@ -2485,7 +2485,7 @@ app.post("/events/:eventId/feedback", async (req, res) => {
     // Only the first answer for a talk is kept: the WHERE skips people who already have the key.
     const updated = await prisma.$executeRaw(Prisma.sql`
       UPDATE "Person"
-      SET schedule_feedback = ${SCHEDULE_FEEDBACK_AS_OBJECT} || jsonb_build_object(${event.id}::text, ${rating}::int)
+      SET schedule_feedback = ${SCHEDULE_FEEDBACK_AS_OBJECT} || jsonb_build_object(${event.id}::text, ${JSON.stringify(body.value)}::jsonb)
       WHERE id = ${person.id}::uuid
         AND NOT jsonb_exists(${SCHEDULE_FEEDBACK_AS_OBJECT}, ${event.id}::text)`);
     res.set("Cache-Control", "no-store");

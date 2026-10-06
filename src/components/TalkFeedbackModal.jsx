@@ -83,16 +83,18 @@ function RatingModal({ talk, remaining, onAnswered }) {
   const [status, setStatus] = useState("idle"); // idle | sending | error
   const sending = status === "sending";
 
-  async function submit() {
-    if (rating == null || sending) return;
+  async function send(answer) {
+    if (sending) return;
     setStatus("sending");
     try {
-      await submitTalkFeedback(talk.id, rating);
+      await submitTalkFeedback(talk.id, answer);
       onAnswered(talk.id);
     } catch {
       setStatus("error");
     }
   }
+  const submit = () => (rating == null ? undefined : send({ rating }));
+  const skip = () => send({ didnt_watch: true });
 
   return (
     <Motion.div
@@ -216,6 +218,27 @@ function RatingModal({ talk, remaining, onAnswered }) {
           }}
         >
           {sending ? "Saving…" : remaining > 1 ? "Send and continue" : "Send"}
+        </button>
+        <button
+          type="button"
+          onClick={skip}
+          disabled={sending}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            borderRadius: 12,
+            border: "1px solid #EEF2F5",
+            background: "#F2F8FA",
+            color: "#6E7892",
+            padding: "11px 0",
+            fontFamily: "Fustat, sans-serif",
+            fontWeight: 600,
+            fontSize: 13,
+            cursor: sending ? "default" : "pointer",
+            opacity: sending ? 0.55 : 1,
+          }}
+        >
+          I didn&apos;t watch it
         </button>
       </Motion.div>
     </Motion.div>

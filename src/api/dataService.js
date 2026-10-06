@@ -321,11 +321,12 @@ export async function listPendingTalkFeedback() {
   return Array.isArray(talks) ? talks : [];
 }
 
-// rating: integer 1-10. The backend keeps only the first answer for each talk.
-export async function submitTalkFeedback(eventId, rating) {
+// answer: { rating: 1-10 } or { didnt_watch: true }. The backend keeps only the first
+// answer for each talk.
+export async function submitTalkFeedback(eventId, answer) {
   return api(`/events/${encodeURIComponent(eventId)}/feedback`, {
     method: "POST",
-    body: JSON.stringify({ rating }),
+    body: JSON.stringify(answer),
   });
 }
 

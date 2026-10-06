@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { answeredEventIds, isRateable, isTalkType, isValidRating, pendingTalks, type FeedbackEvent } from "./talkFeedback.js";
+import {
+  answeredEventIds,
+  isRateable,
+  isTalkType,
+  isValidRating,
+  parseFeedbackBody,
+  pendingTalks,
+  type FeedbackEvent,
+} from "./talkFeedback.js";
 
 const NOW = new Date("2026-10-10T18:00:00Z");
 const at = (iso: string) => new Date(iso);
@@ -26,6 +34,18 @@ test("ratings must be integers from 1 to 10", () => {
 test("answered ids come from the jsonb keys and tolerate bad shapes", () => {
   assert.deepEqual([...answeredEventIds({ a: 8, b: 3 })].sort(), ["a", "b"]);
   for (const bad of [null, undefined, [], "x", 3]) assert.equal(answeredEventIds(bad).size, 0);
+});
+
+test("body is either a valid rating or an explicit didn't-watch, never both or neither", () => {
+  assert.deepEqual(parseFeedbackBody({ rating: 8 }), { ok: true, value: 8 });
+  assert.deepEqual(parseFeedbackBody({ didnt_watch: true }), { ok: true, value: null });
+  const bad = [{}, null, undefined, "x", { rating: 11 }, { rating: 0 }, { didnt_watch: false }, { didnt_watch: "true" }, { rating: 5, didnt_watch: true }, { rating: null }];
+  for (const b of bad) assert.deepEqual(parseFeedbackBody(b), { ok: false });
+});
+
+test("a skipped talk (null) still counts as answered and is not asked again", () => {
+  const t1 = ev("t1", "talk", "2026-10-10T09:00:00Z", "2026-10-10T10:00:00Z");
+  assert.deepEqual(pendingTalks([t1], { t1: null }, NOW, everyone), []);
 });
 
 test("a talk is only rateable once it has ended", () => {
