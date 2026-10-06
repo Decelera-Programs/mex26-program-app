@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { ONE_PAGER_BUCKET, canSeeOnePager, resolveOnePager } from "./lib/onePager.js";
-import { isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
+import { isFounder, isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
 import { prisma } from "./db.js";
@@ -2439,6 +2439,12 @@ app.get("/events/feedback/pending", async (req, res) => {
       res.status(403).json({ error: "No person record linked to this account" });
       return;
     }
+    // Talk ratings are asked of founders only; everyone else just gets an empty list.
+    if (!isFounder(person)) {
+      res.set("Cache-Control", "no-store");
+      res.json([]);
+      return;
+    }
     const contactType = normalizeContactType(person.contact_type);
     const now = new Date();
     const [events, rows] = await Promise.all([
@@ -2470,6 +2476,10 @@ app.post("/events/:eventId/feedback", async (req, res) => {
     const person = await feedbackPerson(req);
     if (!person) {
       res.status(403).json({ error: "No person record linked to this account" });
+      return;
+    }
+    if (!isFounder(person)) {
+      res.status(403).json({ error: "Only founders rate the talks" });
       return;
     }
     const event = await prisma.event.findUnique({ where: { id: eventId.data }, select: feedbackEventSelect });

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   answeredEventIds,
   isRateable,
+  isFounder,
   isTalkType,
   isValidRating,
   parseFeedbackBody,
@@ -20,6 +21,13 @@ const ev = (id: string, type: string, start: string, end: string): FeedbackEvent
   end_time: at(end),
 });
 const everyone = () => true;
+
+test("only founders are asked", () => {
+  for (const p of [{ contact_type: "founder" }, { contact_type: " Founder " }]) assert.equal(isFounder(p), true);
+  for (const p of [{ contact_type: "experience_maker" }, { contact_type: "vc" }, { contact_type: "team" }, { contact_type: "guest" }, { contact_type: null }, {}, null, undefined]) {
+    assert.equal(isFounder(p), false);
+  }
+});
 
 test("only talks, talks and panels count as talks", () => {
   for (const t of ["talk", "Talk", "talks", " panel "]) assert.equal(isTalkType(t), true);

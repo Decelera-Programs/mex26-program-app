@@ -16,6 +16,11 @@ export type FeedbackEvent = {
   visible_to_contact_types?: unknown;
 };
 
+// Only founders are asked to rate the talks (not EMs, VCs, team or guests).
+export function isFounder(person: { contact_type?: string | null } | null | undefined) {
+  return typeof person?.contact_type === "string" && person.contact_type.trim().toLowerCase() === "founder";
+}
+
 export function isTalkType(type: unknown) {
   return typeof type === "string" && TALK_TYPES.has(type.trim().toLowerCase());
 }
