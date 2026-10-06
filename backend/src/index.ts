@@ -2313,39 +2313,36 @@ app.post("/push/unsubscribe", async (req, res) => {
 // is the raw application form; no client renders either.
 const STARTUP_INTERNAL_FIELDS = { challenge_embedding: true, challenges: true } as const;
 
-app.get("/people", async (req, res) => {
-  const q = z.string().optional().parse(req.query.q);
-  const people = await prisma.person.findMany({
-    where: q
-      ? {
-          OR: [
-            { full_name: { contains: q } },
-            { company_name: { contains: q } },
-          ],
-        }
-      : undefined,
-    orderBy: { full_name: "asc" },
-    select: personSafeSelect,
-  });
-  res.set("Cache-Control", "private, max-age=30");
-  res.json(people);
-});
+// One pagers are for experience makers, VCs and the team only; founders must never
+// receive the URL, so it is omitted server-side (hiding it in the UI is not enough).
+async function canSeeOnePager(req: Request) {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth?.email || !auth?.sub) return false;
+  const person = await resolvePersonFromAuth(auth);
+  if (!person) return false;
+  const type = normalizeContactType(person.contact_type);
+  return type === "experience_maker" || type === "vc" || type === "team" || Boolean(person.is_team);
+}
 
-app.get("/people/:id", async (req, res) => {
-  const id = z.string().parse(req.params.id);
-  const person = await prisma.person.findUnique({
-    where: { id },
-    select: personSafeSelect,
-  });
-  if (!person) {
-    res.status(404).json({ error: "Person not found" });
-    return;
-  }
-  res.json(person);
-});
+const ONE_PAGER_BUCKET = "One pagers";
+const ONE_PAGER_SIGNED_URL_TTL_SEC = 6 * 60 * 60; // client caches the startup list, so keep it generous
+
+// `one_pager_url` stores an object path in the private ONE_PAGER_BUCKET (plain http(s)
+// links are passed through). Allowed callers get a short-lived signed URL.
+async function resolveOnePagerUrl(stored: string | null | undefined) {
+  if (!stored) return null;
+  if (/^https?:\/\//i.test(stored)) return stored;
+  const admin = getSupabaseAdmin();
+  if (!admin) return null;
+  const { data, error } = await admin.storage
+    .from(ONE_PAGER_BUCKET)
+    .createSignedUrl(stored, ONE_PAGER_SIGNED_URL_TTL_SEC);
+  return error ? null : data.signedUrl;
+}
 
 app.get("/startups", async (req, res) => {
   const q = z.string().optional().parse(req.query.q);
+  const allowed = await canSeeOnePager(req);
   const startups = await prisma.startup.findMany({
     where: q
       ? {
@@ -2357,20 +2354,30 @@ app.get("/startups", async (req, res) => {
         }
       : undefined,
     orderBy: { name: "asc" },
-    omit: STARTUP_INTERNAL_FIELDS,
+    omit: allowed ? STARTUP_INTERNAL_FIELDS : { ...STARTUP_INTERNAL_FIELDS, one_pager_url: true },
   });
+  const body = allowed
+    ? await Promise.all(
+        startups.map(async (st) => ({ ...st, one_pager_url: await resolveOnePagerUrl(st.one_pager_url) })),
+      )
+    : startups;
   res.set("Cache-Control", "private, max-age=30");
-  res.json(startups);
+  res.json(body);
 });
 
 app.get("/startups/:id", async (req, res) => {
   const id = z.string().parse(req.params.id);
+  const allowed = await canSeeOnePager(req);
   const startup = await prisma.startup.findUnique({
     where: { id },
-    omit: STARTUP_INTERNAL_FIELDS,
+    omit: allowed ? STARTUP_INTERNAL_FIELDS : { ...STARTUP_INTERNAL_FIELDS, one_pager_url: true },
   });
   if (!startup) {
     res.status(404).json({ error: "Startup not found" });
+    return;
+  }
+  if (allowed && "one_pager_url" in startup) {
+    res.json({ ...startup, one_pager_url: await resolveOnePagerUrl(startup.one_pager_url) });
     return;
   }
   res.json(startup);
