@@ -468,7 +468,6 @@ export default function Home() {
               nowMs={nowTick}
               extra={liveEvents.length - 1}
               formatHour={formatHour}
-              accent={getEventDotColor(liveNow.event.type)}
               onClick={() => navigate(`/schedule?event=${encodeURIComponent(liveNow.event.id)}`)}
             />
           </GrowIn>
@@ -568,20 +567,12 @@ export default function Home() {
   );
 }
 
-// Accent per event type (same colours as the schedule dots) -> gradient + text colours.
-function liveCardTheme(accent) {
-  switch (accent) {
-    case "#1FD0EF": return { from: "#1FD0EF", to: "#0A859B", fg: "#FFFFFF", muted: "rgba(255,255,255,0.78)" };
-    case "#4EA72E": return { from: "#6DBE45", to: "#2F7D1C", fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)" };
-    case "#2D3852": return { from: "#3A4B6A", to: "#1A2235", fg: "#FFFFFF", muted: "rgba(255,255,255,0.7)" };
-    case "#0A859B": return { from: "#12A5BD", to: "#0A6C80", fg: "#FFFFFF", muted: "rgba(255,255,255,0.8)" };
-    case "#FFB950": return { from: "#FFD27A", to: "#FFB950", fg: "#2D3852", muted: "rgba(45,56,82,0.7)" };
-    default:        return { from: "#8A94AD", to: "#4A5573", fg: "#FFFFFF", muted: "rgba(255,255,255,0.75)" };
-  }
-}
+// Flat amber on purpose: the hero above is cyan/navy/cream, so this one stays distinct,
+// and the app uses flat colours (no gradients).
+const LIVE_CARD = { bg: "#FFB950", fg: "#2D3852", muted: "rgba(45,56,82,0.72)" };
 
-function LiveNowCard({ event, start, end, nowMs, extra, formatHour, accent, onClick }) {
-  const t = liveCardTheme(accent);
+function LiveNowCard({ event, start, end, nowMs, extra, formatHour, onClick }) {
+  const t = LIVE_CARD;
   const progress = Math.min(1, Math.max(0, (nowMs - start) / Math.max(1, end - start)));
   const minutesLeft = Math.max(1, Math.ceil((end - nowMs) / 60000));
   return (
@@ -589,17 +580,12 @@ function LiveNowCard({ event, start, end, nowMs, extra, formatHour, accent, onCl
       type="button"
       onClick={onClick}
       className="w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px]"
-      style={{
-        background: `linear-gradient(135deg, ${t.from} 0%, ${t.to} 100%)`,
-        color: t.fg,
-        border: "none",
-        boxShadow: `0 12px 30px ${t.to}40`,
-      }}
+      style={{ background: t.bg, color: t.fg, border: "none" }}
     >
       <div className="flex items-center justify-between">
         <span
           className="inline-flex items-center gap-[7px] uppercase rounded-full px-[10px] py-[4px]"
-          style={{ fontSize: "9.5px", letterSpacing: "0.14em", fontWeight: 700, background: "rgba(255,255,255,0.2)" }}
+          style={{ fontSize: "9.5px", letterSpacing: "0.14em", fontWeight: 700, background: "rgba(45,56,82,0.12)" }}
         >
           <span
             className="live-dot"
@@ -627,8 +613,8 @@ function LiveNowCard({ event, start, end, nowMs, extra, formatHour, accent, onCl
         ) : null}
       </div>
 
-      <div style={{ marginTop: 12, height: 4, borderRadius: 9999, background: "rgba(255,255,255,0.25)", overflow: "hidden" }}>
-        <div style={{ width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 9999, background: t.fg, opacity: 0.9 }} />
+      <div style={{ marginTop: 12, height: 4, borderRadius: 9999, background: "rgba(45,56,82,0.15)", overflow: "hidden" }}>
+        <div style={{ width: `${Math.round(progress * 100)}%`, height: "100%", borderRadius: 9999, background: t.fg }} />
       </div>
       <div className="flex items-center justify-between" style={{ marginTop: 6, fontSize: "10.5px", color: t.muted }}>
         <span>{minutesLeft} min left</span>
@@ -644,12 +630,8 @@ function MomentsCard({ onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="relative overflow-hidden w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(255,153,80,0.25)]"
-      style={{
-        background: "linear-gradient(135deg, #FFF1D6 0%, #FFD9A8 55%, #FFC48A 100%)",
-        border: "none",
-        boxShadow: "0 8px 22px rgba(255,153,80,0.18)",
-      }}
+      className="relative overflow-hidden w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
+      style={{ background: "#FAF3DC", border: "none" }}
     >
       <div
         className="decelera-mx-mark pointer-events-none absolute"
@@ -660,9 +642,9 @@ function MomentsCard({ onClick }) {
       <div className="relative flex items-center gap-[12px]">
         <div
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "#2D3852" }}
+          style={{ background: "#FF9950" }}
         >
-          <Camera size={18} color="#FFD9A8" />
+          <Camera size={18} color="#2D3852" />
         </div>
         <div className="min-w-0 flex-1">
           <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#2D3852", margin: 0 }}>
