@@ -567,9 +567,8 @@ export default function Home() {
   );
 }
 
-// Flat amber on purpose: the hero above is cyan/navy/cream, so this one stays distinct,
-// and the app uses flat colours (no gradients).
-const LIVE_CARD = { bg: "#FFB950", fg: "#2D3852", muted: "rgba(45,56,82,0.72)" };
+// Flat brand cream (the app uses flat colours, no gradients); the pulsing dot is the accent.
+const LIVE_CARD = { bg: "#FAF3DC", fg: "#2D3852", muted: "rgba(45,56,82,0.7)", dot: "#FF9950" };
 
 function LiveNowCard({ event, start, end, nowMs, extra, formatHour, onClick }) {
   const t = LIVE_CARD;
@@ -590,7 +589,7 @@ function LiveNowCard({ event, start, end, nowMs, extra, formatHour, onClick }) {
           <span
             className="live-dot"
             aria-hidden="true"
-            style={{ width: 7, height: 7, borderRadius: "9999px", background: t.fg, display: "inline-block" }}
+            style={{ width: 7, height: 7, borderRadius: "9999px", background: t.dot, display: "inline-block" }}
           />
           Happening now
         </span>
@@ -631,7 +630,7 @@ function MomentsCard({ onClick }) {
       type="button"
       onClick={onClick}
       className="relative overflow-hidden w-full text-left rounded-[20px] px-[18px] pt-[16px] pb-[16px] transition-all duration-200 hover:-translate-y-[1px] hover:shadow-[0_10px_28px_rgba(45,56,82,0.08)]"
-      style={{ background: "#FAF3DC", border: "none" }}
+      style={{ background: "#D2F4FB", border: "none" }}
     >
       <div
         className="decelera-mx-mark pointer-events-none absolute"
@@ -642,7 +641,7 @@ function MomentsCard({ onClick }) {
       <div className="relative flex items-center gap-[12px]">
         <div
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "#FF9950" }}
+          style={{ background: "#1FD0EF" }}
         >
           <Camera size={18} color="#2D3852" />
         </div>
@@ -650,7 +649,7 @@ function MomentsCard({ onClick }) {
           <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#2D3852", margin: 0 }}>
             Moments
           </p>
-          <p style={{ fontSize: "11px", color: "#6B4700", margin: "3px 0 0" }}>
+          <p style={{ fontSize: "11px", color: "#0A6C80", margin: "3px 0 0" }}>
             Photos &amp; stories from every day
           </p>
         </div>
