@@ -643,7 +643,7 @@ function MomentsCard({ onClick }) {
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center flex-shrink-0"
           style={{ background: "#2D3852" }}
         >
-          <Camera size={18} color="#FFB950" />
+          <Camera size={18} color="#FAF3DC" />
         </div>
         <div className="min-w-0 flex-1">
           <p style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 19, lineHeight: 1.1, color: "#2D3852", margin: 0 }}>
