@@ -881,7 +881,7 @@ export default function OneOnOnes() {
                                         Post-session feedback
                                       </p>
                                       <p style={{ fontSize: 10.5, color: "#6E7892", lineHeight: 1.55, marginBottom: 5 }}>
-                                        Record a short voice note or type it covering the following areas. Rate each 1–5 where relevant.
+                                        Record a short voice note or type it. Use these points as a guide for what to cover: no scores needed, just share what stood out to you.
                                       </p>
                                       <ul style={{ fontSize: 10.5, color: "#6E7892", lineHeight: 1.65, paddingLeft: 14, margin: 0 }}>
                                         <li><span style={{ fontWeight: 600, color: "#2D3852" }}>State of development</span> — current product or project maturity</li>
