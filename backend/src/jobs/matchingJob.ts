@@ -14,7 +14,7 @@ export const MATCHING_TIMEZONE = "America/Cancun";
 // First program day (YYYY-MM-DD, MATCHING_TIMEZONE) on which real matches may be created.
 const MATCH_START_DATE = (process.env.MATCH_START_DATE || "2026-10-10").trim();
 // Local hour (0-23) from which each day's matches are created and pushed.
-const MATCH_START_HOUR = Number.parseInt(process.env.MATCH_START_HOUR || "7", 10);
+const MATCH_START_HOUR = Number.parseInt(process.env.MATCH_START_HOUR || "8", 10);
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 export const MATCH_WEIGHT_CHALLENGE = 3;
 export const MATCH_WEIGHT_DIRECT_TAG = 1;
