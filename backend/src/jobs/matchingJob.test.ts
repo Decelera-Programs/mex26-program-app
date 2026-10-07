@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   scoreCandidates,
+  challengeNarrative,
   assignFoundersToEms,
   MATCH_WEIGHT_CHALLENGE,
   MATCH_WEIGHT_DIRECT_TAG,
@@ -150,5 +151,24 @@ describe("assignFoundersToEms", () => {
   it("returns an empty assignment for no edges", () => {
     const assignment = assignFoundersToEms([], 4);
     assert.equal(assignment.size, 0);
+  });
+});
+
+describe("free-text challenge (v2)", () => {
+  it("challengeNarrative reads the new fields and tolerates anything else", () => {
+    const n = challengeNarrative({ question: " How might we? ", why_now: "MRR", tried: "pricing", list: ["a", 3, "b"] });
+    assert.equal(n.question, "How might we?");
+    assert.equal(n.whyNow, "MRR");
+    assert.deepEqual(n.others, ["a", "b"]);
+    assert.deepEqual(challengeNarrative(null), { question: "", chosen: "", whyNow: "", tried: "", others: [] });
+  });
+
+  it("LLM-derived challenge tags score like section-derived ones", () => {
+    const founder = person({ id: "f", startup: { id: "s", name: "S", challenges: { question: "q" }, challenge_embedding: null } });
+    const ems = [person({ id: "a", expertise_tags: ["GTM"] }), person({ id: "b", expertise_tags: ["Culture"] })];
+    const out = scoreCandidates(founder, ems, new Set(), { founderChallengeTags: ["GTM"] });
+    assert.equal(out.length, 1);
+    assert.equal(out[0].em.id, "a");
+    assert.equal(out[0].tagScore, MATCH_WEIGHT_CHALLENGE);
   });
 });

@@ -78,6 +78,22 @@ falling back to the legacy boolean field on older rows:
 | `talked: "wont"` | `min(1, daysAgo / 7)` |
 | no / other feedback (incl. `not_yet`) | `min(1, daysAgo / 3)` |
 
+### Free-text challenge (2026 format)
+
+`Startup.challenges` may also be the "Prepare your Challenge" doc as free text (all fields
+optional, coexists with the old `sections`/`deep_dive` shape):
+
+```json
+{ "list": ["challenge 1", "challenge 2"], "chosen": "…", "question": "How might we…?",
+  "why_now": "…", "tried": "…" }
+```
+
+Any of `question`/`chosen`/`why_now`/`tried` non-empty puts the founder in the pool. Those
+texts feed the semantic need vector and the OpenAI brief. For the tag term, one chat call per
+startup picks up to 4 tags **from the EMs' tag vocabulary** (`loadFounderChallengeTags`,
+cached in memory by hash); they are added to the section-derived challenge tags. Dry run shows
+them as `plan[].challenge_tags`. `?asOf=YYYY-MM-DD` (dry run only) previews a future day.
+
 ### Semantic scoring
 
 `textScore` = `MATCH_WEIGHT_TEXT · rescale(cosine(needVec, offerVec))`, where:

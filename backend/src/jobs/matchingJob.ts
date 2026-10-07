@@ -148,8 +148,37 @@ function hasMeaningfulExpertiseTags(tags: unknown): tags is string[] {
   return Array.isArray(tags) && tags.some((t) => typeof t === "string" && t.trim());
 }
 
+// Free-text challenge (2026 "Prepare your Challenge" doc). Stored on Startup.challenges as
+// { question, chosen, why_now, tried, list: string[] }; all fields optional. Coexists with the
+// older rated-sections shape ({ sections, deep_dive }), which is still honoured.
+export type ChallengeNarrative = {
+  question: string;
+  chosen: string;
+  whyNow: string;
+  tried: string;
+  others: string[];
+};
+
+export function challengeNarrative(challenges: unknown): ChallengeNarrative {
+  const c = challenges && typeof challenges === "object" ? (challenges as Record<string, unknown>) : {};
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  return {
+    question: str(c.question),
+    chosen: str(c.chosen),
+    whyNow: str(c.why_now),
+    tried: str(c.tried),
+    others: Array.isArray(c.list) ? c.list.map(str).filter(Boolean) : [],
+  };
+}
+
+function hasNarrativeChallenge(challenges: unknown): boolean {
+  const n = challengeNarrative(challenges);
+  return Boolean(n.question || n.chosen || n.whyNow || n.tried);
+}
+
 function hasMeaningfulChallenges(challenges: unknown): boolean {
   if (!challenges || typeof challenges !== "object") return false;
+  if (hasNarrativeChallenge(challenges)) return true;
   const sections = (challenges as { sections?: unknown }).sections;
   if (!sections || typeof sections !== "object") return false;
   return Object.values(sections as Record<string, unknown>).some((section) => {
@@ -327,7 +356,101 @@ function founderNeedText(startup: MatchCandidatePerson["startup"]): string {
   const sections = topChallengeSections(startup.challenges)
     .map((s) => s.section.replace(/_/g, " "))
     .join(", ");
-  return [startup.name, challengeName, expertiseWanted, sections].filter(Boolean).join("\n").trim();
+  const n = challengeNarrative(startup.challenges);
+  return [startup.name, n.question, n.chosen, n.whyNow, n.tried, challengeName, expertiseWanted, sections]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+// ---- Challenge -> EM tags (LLM classification of the free-text challenge) ---
+// The new challenge has no rated sections, so the tag-overlap term needs tags from
+// somewhere: one cheap chat call per startup picks up to 4 tags FROM THE EM VOCABULARY
+// that a helper would need. Cached in memory by hash(model + text + vocab) — no schema
+// change; a restart just recomputes. Never throws: failures yield no tags (text term only).
+const MATCH_CHALLENGE_MAX_TAGS = 4;
+const challengeTagCache = new Map<string, string[]>();
+
+async function classifyChallengeTags(text: string, vocab: string[]): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: OPENAI_MATCHING_MODEL,
+        temperature: 0,
+        max_tokens: 200,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You tag a startup founder's challenge with the expertise a helper would need. " +
+              `Choose up to ${MATCH_CHALLENGE_MAX_TAGS} tags, ONLY from the provided vocabulary, ` +
+              "the ones that best match the expertise needed to help with this challenge. " +
+              'Respond with ONLY a JSON object: {"tags": string[]}.',
+          },
+          { role: "user", content: JSON.stringify({ vocabulary: vocab, challenge: text.slice(0, 4000) }) },
+        ],
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    if (!response.ok) return [];
+    const parsed = JSON.parse(payload?.choices?.[0]?.message?.content || "{}") as { tags?: unknown };
+    const allowed = new Set(vocab);
+    return Array.isArray(parsed.tags)
+      ? parsed.tags
+          .filter((t): t is string => typeof t === "string" && allowed.has(t))
+          .slice(0, MATCH_CHALLENGE_MAX_TAGS)
+      : [];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function loadFounderChallengeTags(
+  founders: MatchCandidatePerson[],
+  ems: MatchCandidatePerson[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!OPENAI_API_KEY) return out;
+  const vocab = Array.from(
+    new Set(
+      ems.flatMap((em) =>
+        hasMeaningfulExpertiseTags(em.expertise_tags) ? em.expertise_tags.map((t) => t.trim()).filter(Boolean) : [],
+      ),
+    ),
+  ).sort();
+  if (vocab.length === 0) return out;
+  const vocabHash = hashText(vocab.join("|"));
+
+  const byStartup = new Map<string, string>();
+  for (const f of founders) {
+    if (!f.startup_id || !f.startup || byStartup.has(f.startup_id)) continue;
+    if (!hasNarrativeChallenge(f.startup.challenges)) continue;
+    const n = challengeNarrative(f.startup.challenges);
+    byStartup.set(f.startup_id, [n.question, n.chosen, n.whyNow, n.tried].filter(Boolean).join("\n"));
+  }
+
+  await Promise.all(
+    [...byStartup].map(async ([startupId, text]) => {
+      const key = hashText(`${OPENAI_MATCHING_MODEL}:${vocabHash}:${text}`);
+      let tags = challengeTagCache.get(key);
+      if (!tags) {
+        tags = await classifyChallengeTags(text, vocab);
+        if (tags.length > 0) challengeTagCache.set(key, tags);
+      }
+      out.set(startupId, tags);
+    }),
+  );
+  return out;
 }
 
 function emOfferText(em: MatchCandidatePerson): string {
@@ -447,10 +570,16 @@ export function scoreCandidates(
   founder: MatchCandidatePerson,
   ems: MatchCandidatePerson[],
   hardExcludedPairs: Set<string>,
-  ctx?: { founderNeedVec?: number[] | null; emOfferVecs?: Map<string, number[]> },
+  ctx?: {
+    founderNeedVec?: number[] | null;
+    emOfferVecs?: Map<string, number[]>;
+    founderChallengeTags?: string[];
+  },
 ): CandidateScore[] {
   const founderTags = hasMeaningfulExpertiseTags(founder.expertise_tags) ? founder.expertise_tags : [];
-  const challengeTags = tagsFromChallengeSections(founder.startup?.challenges);
+  const challengeTags = Array.from(
+    new Set([...tagsFromChallengeSections(founder.startup?.challenges), ...(ctx?.founderChallengeTags ?? [])]),
+  );
   const needVec = ctx?.founderNeedVec ?? null;
 
   // Return every viable EM (score > 0); the daily job trims/penalises from here.
@@ -491,6 +620,7 @@ async function writeMatchTopic(
   const challenges = founder.startup?.challenges as
     | { deep_dive?: { challenge_name?: string; expertise_wanted?: string } }
     | undefined;
+  const narrative = challengeNarrative(founder.startup?.challenges);
   const founderContext = {
     full_name: founder.full_name,
     startup_name: founder.startup?.name || null,
@@ -498,6 +628,10 @@ async function writeMatchTopic(
     priority_challenges: topChallengeSections(founder.startup?.challenges),
     challenge_name: challenges?.deep_dive?.challenge_name || null,
     expertise_wanted: challenges?.deep_dive?.expertise_wanted || null,
+    // Free-text challenge: the question they framed, what's at stake and what they've tried.
+    challenge_question: narrative.question || narrative.chosen || null,
+    why_now: narrative.whyNow || null,
+    already_tried: narrative.tried || null,
   };
   const emContext = {
     full_name: em.full_name,
@@ -719,6 +853,7 @@ type MatchPlanEntry = {
   weight: number;
   method: string;
   prior_matches: number;
+  challenge_tags: string[];
 };
 
 export type MatchEdge = { founderId: string; emId: string; score: number; weight: number };
@@ -808,11 +943,12 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
     }
 
     const founderIds = foundersToProcess.map((f) => f.id);
-    const [emMultiplier, pairInfo, founderNeedVecs, emOfferVecs] = await Promise.all([
+    const [emMultiplier, pairInfo, founderNeedVecs, emOfferVecs, founderChallengeTags] = await Promise.all([
       loadEmScoreMultipliers(),
       loadPairMultipliers(founderIds, todayKey),
       loadFounderNeedVectors(foundersToProcess),
       loadEmOfferVectors(ems),
+      loadFounderChallengeTags(foundersToProcess, ems),
     ]);
     const { multiplier: pairMultiplier, hardExcluded: hardExcludedPairs, priorCount: pairPriorCount } =
       pairInfo;
@@ -830,6 +966,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
       const shortlist = scoreCandidates(founder, ems, hardExcludedPairs, {
         founderNeedVec: founder.startup_id ? founderNeedVecs.get(founder.startup_id) : null,
         emOfferVecs,
+        founderChallengeTags: founder.startup_id ? founderChallengeTags.get(founder.startup_id) : undefined,
       });
       shortlistByFounder.set(founder.id, shortlist);
       for (const c of shortlist) scoreByPair.set(`${founder.id}:${c.em.id}`, c);
@@ -898,6 +1035,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
         weight: round2(weightOf(founderId, chosen.emId, chosen.score)),
         method: chosen.method,
         prior_matches: pairPriorCount.get(`${founderId}:${chosen.emId}`) ?? 0,
+        challenge_tags: (founder.startup_id && founderChallengeTags.get(founder.startup_id)) || [],
       });
     }
     plan.sort((a, b) => b.score - a.score);
