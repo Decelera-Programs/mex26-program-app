@@ -53,7 +53,7 @@ never picks the person.
 | `MATCH_PAIR_COOLDOWN_NOT_USEFUL_DAYS` | `10` | Same, when the founder rated that pair `meh` — effectively "not again this program". |
 | `MATCH_FEEDBACK_REMINDER_HOUR` | `20` | Local hour (`MATCHING_TIMEZONE`) from which `runMatchFeedbackReminders` sends the end-of-day "rate your match" push. |
 | `MATCH_FEEDBACK_PENDING_DAYS` | `2` | How many days an unrated match keeps riding along on `/matches/me` as a `pending` card. |
-| `OPENAI_MATCHING_MODEL` | env, `gpt-4o-mini` | Model for `writeMatchTopic`. |
+| `OPENAI_MATCHING_MODEL` | env, `gpt-4.1` | Model for `writeMatchTopic`. |
 
 ### Multiplier curves
 

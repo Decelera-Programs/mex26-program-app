@@ -6,7 +6,7 @@ import { dateKeyInTimezone, todayDateKey, hourInTimezone } from "../lib/dateTime
 import { personSafeSelect } from "../lib/personSelect.js";
 
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
-const OPENAI_MATCHING_MODEL = (process.env.OPENAI_MATCHING_MODEL || "gpt-4o-mini").trim();
+const OPENAI_MATCHING_MODEL = (process.env.OPENAI_MATCHING_MODEL || "gpt-4.1").trim();
 const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small").trim();
 
 // Founder<->Experience Maker daily matching runs in the program's timezone.
@@ -1077,7 +1077,14 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
           }),
         );
       }
-      return { ...base, em_capacity: capacity, would_match: plan.length, plan, skipped, ...(briefs ? { briefs } : {}) };
+      return {
+        ...base,
+        em_capacity: capacity,
+        would_match: plan.length,
+        plan,
+        skipped,
+        ...(briefs ? { briefs, brief_model: OPENAI_MATCHING_MODEL } : {}),
+      };
     }
 
     // 3. Persist one Match + two notifications per assigned founder (atomically).
