@@ -13,6 +13,8 @@ const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embe
 export const MATCHING_TIMEZONE = "America/Cancun";
 // First program day (YYYY-MM-DD, MATCHING_TIMEZONE) on which real matches may be created.
 const MATCH_START_DATE = (process.env.MATCH_START_DATE || "2026-10-10").trim();
+// Local hour (0-23) from which each day's matches are created and pushed.
+const MATCH_START_HOUR = Number.parseInt(process.env.MATCH_START_HOUR || "7", 10);
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 export const MATCH_WEIGHT_CHALLENGE = 3;
 export const MATCH_WEIGHT_DIRECT_TAG = 1;
@@ -761,6 +763,11 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
       const today = todayDateKey(MATCHING_TIMEZONE);
       if (today < MATCH_START_DATE) {
         return { ok: true as const, dry_run: false, skipped: "before_start_date" as const, matched: 0 };
+      }
+      // Daily matches (and their push) go out from MATCH_START_HOUR local, not at midnight.
+      const hour = hourInTimezone(new Date(), MATCHING_TIMEZONE);
+      if (hour === null || hour < MATCH_START_HOUR) {
+        return { ok: true as const, dry_run: false, skipped: "before_start_hour" as const, matched: 0 };
       }
     }
 
