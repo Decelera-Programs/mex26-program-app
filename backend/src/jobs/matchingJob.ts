@@ -941,7 +941,11 @@ export type MatchAssignment = { emId: string; score: number; method: string };
 // rescues founders who still have no slot ("global_fill"), so nobody is left
 // without a recommendation. Pure and deterministic given its inputs — ties break
 // on founderId/emId so the result doesn't depend on edge order.
-export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<string, MatchAssignment> {
+export function assignFoundersToEms(
+  edges: MatchEdge[],
+  capacity: number,
+  initialLoad: Map<string, number> = new Map(),
+): Map<string, MatchAssignment> {
   const sorted = [...edges].sort(
     (a, b) =>
       b.weight - a.weight ||
@@ -950,7 +954,9 @@ export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<s
   );
 
   const assignment = new Map<string, MatchAssignment>();
-  const emLoad = new Map<string, number>();
+  // Seeded with the founders each EM already got earlier today (previous ticks), so the daily
+  // cap holds across the 5-minute job loop and not just within one tick.
+  const emLoad = new Map<string, number>(initialLoad);
   const tryAssign = (edge: MatchEdge, method: string, cap: number) => {
     if (assignment.has(edge.founderId)) return;
     if ((emLoad.get(edge.emId) ?? 0) >= cap) return;
@@ -960,6 +966,30 @@ export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<s
   for (const edge of sorted) tryAssign(edge, "global_greedy", capacity);
   for (const edge of sorted) tryAssign(edge, "global_fill", capacity + 1);
   return assignment;
+}
+
+async function loadEmLoadToday(todayKey: string): Promise<Map<string, number>> {
+  const rows = await prisma.match.findMany({
+    where: { match_date: new Date(`${todayKey}T00:00:00.000Z`) },
+    select: { em_id: true },
+  });
+  const load = new Map<string, number>();
+  for (const r of rows) load.set(r.em_id, (load.get(r.em_id) ?? 0) + 1);
+  return load;
+}
+
+// The job ticks every 5 minutes but the day only needs one real attempt. After a
+// clean run we remember a fingerprint of everything that can change the outcome
+// (who is left to match, their challenge text and the EMs' profiles); later ticks with
+// the same fingerprint skip all the scoring/OpenAI work. A change — a founder gets
+// challenges, an EM's dates/tags are fixed — re-runs it. In-memory: a restart just
+// does one extra (safe, load-aware) pass.
+let lastMatchedSignature: { todayKey: string; signature: string } | null = null;
+
+function poolSignature(todayKey: string, founders: MatchCandidatePerson[], ems: MatchCandidatePerson[]): string {
+  const f = founders.map((p) => `${p.id}|${hashText(founderNeedText(p.startup))}|${JSON.stringify(p.expertise_tags ?? null)}`).sort();
+  const e = ems.map((p) => `${p.id}|${hashText(emOfferText(p))}`).sort();
+  return hashText([todayKey, ...f, "--", ...e].join("\n"));
 }
 
 // Never throws: any unexpected error is caught and returned as { ok: false }, so
@@ -1019,6 +1049,11 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
       };
     }
 
+    const signature = poolSignature(todayKey, foundersToProcess, ems);
+    if (!dryRun && lastMatchedSignature?.todayKey === todayKey && lastMatchedSignature.signature === signature) {
+      return { ...base, skipped: "no_changes_since_last_run" as const, matched: 0 };
+    }
+
     const founderIds = foundersToProcess.map((f) => f.id);
     const [emMultiplier, pairInfo, founderNeedVecs, emOfferVecs, founderChallengeTags] = await Promise.all([
       loadEmScoreMultipliers(),
@@ -1060,11 +1095,15 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
     // 2. Global greedy assignment by weight: each founder gets <=1 EM, each EM gets
     //    <= capacity founders/day. A second pass at capacity+1 rescues founders who
     //    still have no slot, so nobody is left without a recommendation.
+    // Capacity is sized on ALL founders in play today (already matched + still to match)
+    // and EMs start with the load they already carry, so later ticks can't overfill them.
+    const alreadyMatchedCount = excludedFounders.filter((x) => x.reason === "already_matched_today").length;
     const capacity = Math.min(
       MATCH_EM_DAILY_CAPACITY_CAP,
-      Math.max(1, Math.ceil(foundersToProcess.length / ems.length)),
+      Math.max(1, Math.ceil((foundersToProcess.length + alreadyMatchedCount) / ems.length)),
     );
-    const assignment = assignFoundersToEms(edges, capacity);
+    const emLoadToday = await loadEmLoadToday(todayKey);
+    const assignment = assignFoundersToEms(edges, capacity, emLoadToday);
 
     // 2b. Quality floor: drop any assigned pair whose fit score (tag + text, no
     //     multipliers) is below MATCH_MIN_SCORE. Those founders get no match today
@@ -1261,6 +1300,8 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
         else failed += 1;
       }
     }
+
+    if (failed === 0) lastMatchedSignature = { todayKey, signature };
 
     return {
       ...base,

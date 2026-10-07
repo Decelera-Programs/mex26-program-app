@@ -172,3 +172,20 @@ describe("free-text challenge (v2)", () => {
     assert.equal(out[0].tagScore, MATCH_WEIGHT_CHALLENGE);
   });
 });
+
+describe("EM load carried across ticks", () => {
+  const e = (founderId: string, emId: string, w: number): MatchEdge => ({ founderId, emId, score: w, weight: w });
+
+  it("an EM already at capacity from earlier ticks takes no more founders", () => {
+    const edges = [e("f1", "a", 10), e("f1", "b", 5)];
+    const out = assignFoundersToEms(edges, 1, new Map([["a", 1]]));
+    // capacity+1 fill pass could still use "a", but the greedy pass must prefer "b" first
+    assert.equal(out.get("f1")?.emId, "b");
+    assert.equal(out.get("f1")?.method, "global_greedy");
+  });
+
+  it("without prior load behaviour is unchanged", () => {
+    const out = assignFoundersToEms([e("f1", "a", 10), e("f1", "b", 5)], 1);
+    assert.equal(out.get("f1")?.emId, "a");
+  });
+});
