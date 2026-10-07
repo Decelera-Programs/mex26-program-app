@@ -22,7 +22,7 @@ per day: a founder already matched today is skipped, and
 | 2 | **Affinity score** — `score = tagScore + textScore`. **tagScore**: from the founder's 1–2 worst‑rated `challenges.sections` derive `challengeTags` (via `MATCH_SECTION_TO_TAGS`), then `3·(EM tags ∩ challengeTags) + 1·(EM tags ∩ founder tags)`. **textScore**: semantic similarity between the founder's stated need and the EM's profile (see *Semantic scoring* below). Keep `score > 0`. Pairs matched in the last day are excluded here. | `scoreCandidates`, `topChallengeSections`, `loadFounderNeedVectors`, `loadEmOfferVectors` |
 | 3 | **Weight** — `weight = score · emMultiplier(EM) · pairMultiplier(founder,EM)`. `emMultiplier` dampens EMs founders keep rating unhelpful; `pairMultiplier` is the repeated‑pair cooldown. | `loadEmScoreMultipliers`, `loadPairMultipliers` |
 | 4 | **Global assignment** — sort all edges by `weight` desc. Greedy pass: each founder ≤ 1 EM, each EM ≤ `capacity` founders/day where `capacity = min(4, ceil(#founders / #EMs))`. A second pass at `capacity + 1` (`global_fill`) rescues founders left with no slot. Then the **quality floor** (`MATCH_MIN_SCORE`) drops any assigned pair whose `score` is too low to be worth a recommendation. | `runDailyMatchingJob` step 2 |
-| 5 | **Brief** — OpenAI (`gpt-4o-mini`) writes `{topic, why[], questions[], opener, em_blurb}` for the already‑chosen pair: what to talk about, why the two fit, 3 concrete questions, a founder ice‑breaker, and an EM‑facing one‑liner. On any failure, a deterministic fallback from shared tags. If the pair has matched before, the last 3 briefs (topic, questions, rating/takeaway) are passed so it writes a follow-up, not a rerun (`loadPriorBriefs`). | `writeMatchTopic`, `fallbackMatchTopic` |
+| 5 | **Brief** — OpenAI (`gpt-4.1`) writes `{topic, why[], questions[], opener, em_blurb}` for the already‑chosen pair: what to talk about, why the two fit, 3 concrete questions, a founder ice‑breaker, and an EM‑facing one‑liner. Up to 3 attempts with backoff; **there is no fallback text**: if it still fails, no match/push is created for that founder and the next tick (5 min) retries. If an embedding/tag classification fails, the affected founders (or the whole tick, if an EM embedding failed) wait for the next tick too (`skipped: ai_unavailable`). If the pair has matched before, the last 3 briefs (topic, questions, rating/takeaway) are passed so it writes a follow-up, not a rerun (`loadPriorBriefs`). | `writeMatchTopicWithRetry` |
 | 6 | **Persist** — one `Match` row + two `Notification` rows (founder + EM, `message = MATCH_NOTIFICATION_TEXT` — a teaser; details are on the card, linked by `match_id`). Push delivery is handled by the existing `runPushDispatch`. Any `match_id`-linked notification's push carries `matchId` (not `personId`), so tapping it opens Home at `/?match=<id>`, which scrolls to and expands that match card. | `runDailyMatchingJob` step 3 |
 | 7 | **Feedback** — `PATCH /matches/:id/feedback` writes back into `match.feedback`; feeds steps 3′ (EM reputation) and 3″ (pair cooldown) on later days. | `PATCH /matches/:id/feedback` |
 | 8 | **Feedback reminder** — after `MATCH_FEEDBACK_REMINDER_HOUR` local, one push per unrated side of today's matches (*"¿Hablaste hoy con X?…"*). At most one per person per match (`feedback.reminders`). Unrated matches also keep showing on `/matches/me` as `pending` cards for `MATCH_FEEDBACK_PENDING_DAYS`. | `runMatchFeedbackReminders` |
@@ -128,7 +128,7 @@ them as `plan[].challenge_tags`. `?asOf=YYYY-MM-DD` (dry run only) previews a fu
 | `candidate_pool` | jsonb | `[{ em_id, score, tag, text }]`, top `MATCH_CANDIDATE_POOL_SIZE` by raw score |
 | `selection_method` | text | `global_greedy` \| `global_fill` |
 | `reason_text` | text | the `topic` (headline shown in the card) |
-| `ai_raw_response` | jsonb null | The full brief: `{ topic, opener, why: string[], questions: string[], em_blurb, source: "ai"\|"fallback", prior_matches, score_breakdown: { tag, text } }` |
+| `ai_raw_response` | jsonb null | The full brief: `{ topic, opener, why: string[], questions: string[], em_blurb, source: "ai", prior_matches, score_breakdown: { tag, text } }` |
 | `feedback` | jsonb null | `{ founder?: {talked, rating, useful, takeaway, note, at}, em?: {...}, connect?: {founder?, em?}, reminders?: {founder?, em?} }` — `connect` = "Quiero hablar" timestamps; `reminders` = when the end-of-day feedback push was sent to that side. Added out of band, see below |
 | `createdat` | timestamptz | |
 
@@ -191,7 +191,7 @@ Everything needed to explain a day's matches is on the row:
 - `score` vs. the EM's position in `candidate_pool` — how strong was the affinity?
 - `ai_raw_response.score_breakdown` — was the match driven by literal tags (`tag`)
   or by semantic similarity (`text`)?
-- `ai_raw_response.source` — did OpenAI write the text, or the fallback?
+- `ai_raw_response.source` — always `ai` now (no fallback text).
 - `ai_raw_response.prior_matches` — is this a repeat pair, and how many times?
 - `feedback` — what did each side report?
 
@@ -236,7 +236,7 @@ group by e.full_name order by founders_matched desc;
 | `text_score` dominates / barely moves | Adjust `MATCH_WEIGHT_TEXT`, or `MATCH_TEXT_SIM_MIN`/`MAX` after eyeballing real cosines in a dry run (raw cosine is in `plan[].text_score / MATCH_WEIGHT_TEXT` scaled back). |
 | Topics feel generic | Improve `challenges.deep_dive` / `challenges.sections` data quality, or the system prompt in `writeMatchTopic`. |
 | Lots of `skipped` with `below_quality_floor` | The pool has no good pairings — thin `expertise_wanted` / EM profiles, or a cohort with little overlap. Fix the data; only lower `MATCH_MIN_SCORE` if a weak match really is better than none. |
-| OpenAI down / `source: "fallback"` everywhere | Check `OPENAI_API_KEY`; the fallback text still works, it's just blander. |
+| OpenAI down | No matches are created until it recovers (`deferred_briefs` / `skipped: ai_unavailable` in the job result); ticks retry every 5 min. Check `OPENAI_API_KEY` and OpenAI status. |
 
 ## Schema changes made outside Prisma Migrate
 

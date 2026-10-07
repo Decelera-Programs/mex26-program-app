@@ -4,6 +4,9 @@ import {
   scoreCandidates,
   challengeNarrative,
   assignFoundersToEms,
+  writeMatchTopicWithRetry,
+  mapWithConcurrency,
+  MATCH_BRIEF_MAX_ATTEMPTS,
   MATCH_WEIGHT_CHALLENGE,
   MATCH_WEIGHT_DIRECT_TAG,
   type MatchCandidatePerson,
@@ -187,5 +190,62 @@ describe("EM load carried across ticks", () => {
   it("without prior load behaviour is unchanged", () => {
     const out = assignFoundersToEms([e("f1", "a", 10), e("f1", "b", 5)], 1);
     assert.equal(out.get("f1")?.emId, "a");
+  });
+});
+
+const okBrief = { topic: "t", opener: "o", why: ["w"], questions: ["q"], em_blurb: "b" };
+
+describe("writeMatchTopicWithRetry", () => {
+  const f = person({ id: "f" });
+  const e = person({ id: "e" });
+
+  it("returns the brief after transient failures", async () => {
+    let calls = 0;
+    const brief = await writeMatchTopicWithRetry(f, e, [], async () => {
+      calls += 1;
+      if (calls < 3) throw new Error("429");
+      return okBrief;
+    }, [0, 0]);
+    assert.equal(calls, 3);
+    assert.deepEqual(brief, okBrief);
+  });
+
+  it("throws (no generic text) when every attempt fails", async () => {
+    let calls = 0;
+    await assert.rejects(
+      writeMatchTopicWithRetry(f, e, [], async () => {
+        calls += 1;
+        throw new Error("down");
+      }, [0, 0]),
+      /down/,
+    );
+    assert.equal(calls, MATCH_BRIEF_MAX_ATTEMPTS);
+  });
+
+  it("does not retry a missing API key", async () => {
+    let calls = 0;
+    await assert.rejects(
+      writeMatchTopicWithRetry(f, e, [], async () => {
+        calls += 1;
+        throw new Error("OPENAI_API_KEY is not configured in backend env");
+      }, [0, 0]),
+    );
+    assert.equal(calls, 1);
+  });
+});
+
+describe("mapWithConcurrency", () => {
+  it("keeps order and never exceeds the limit", async () => {
+    let active = 0;
+    let peak = 0;
+    const out = await mapWithConcurrency([1, 2, 3, 4, 5, 6, 7, 8], 3, async (n) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 5));
+      active -= 1;
+      return n * 2;
+    });
+    assert.deepEqual(out, [2, 4, 6, 8, 10, 12, 14, 16]);
+    assert.ok(peak <= 3);
   });
 });
