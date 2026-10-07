@@ -206,8 +206,8 @@ export type MatchCandidatePerson = {
   startup: { id: string; name: string; challenges: unknown; challenge_embedding: unknown } | null;
 };
 
-async function loadMatchingPoolForToday() {
-  const todayKey = todayDateKey(MATCHING_TIMEZONE);
+async function loadMatchingPoolForToday(asOf?: string) {
+  const todayKey = asOf ?? todayDateKey(MATCHING_TIMEZONE);
   const people = await prisma.person.findMany({
     where: { contact_type: { in: ["founder", "experience_maker"] } },
     select: {
@@ -754,7 +754,7 @@ export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<s
 // one bad day can't take down /jobs/run-all. Pass { dryRun: true } to compute the
 // plan + skip reasons without writing any match/notification rows or generating
 // topic text (embeddings are still resolved — cheap and cached).
-export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; withBriefs?: boolean } = {}) {
+export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; withBriefs?: boolean; asOf?: string } = {}) {
   const dryRun = opts.dryRun === true;
   try {
     // Program start gate: real runs do nothing before MATCH_START_DATE (Cancun date),
@@ -785,7 +785,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
       }
     }
 
-    const { founders, ems, todayKey, excludedFounders } = await loadMatchingPoolForToday();
+    const { founders, ems, todayKey, excludedFounders } = await loadMatchingPoolForToday(dryRun ? opts.asOf : undefined);
     const foundersToProcess = founders.slice(0, limit);
     const base = {
       ok: true as const,

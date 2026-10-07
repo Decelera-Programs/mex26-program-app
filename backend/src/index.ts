@@ -2808,7 +2808,9 @@ app.post("/jobs/matching/run", requireJobsApiKey, async (req, res) => {
       String(req.query.dryRun ?? req.query.dry_run ?? "").toLowerCase(),
     );
     const withBriefs = ["1", "true", "yes"].includes(String(req.query.briefs ?? "").toLowerCase());
-    const result = await runDailyMatchingJob(limit, { dryRun, withBriefs: dryRun && withBriefs });
+    const asOfRaw = String(req.query.asOf ?? "");
+    const asOf = /^\d{4}-\d{2}-\d{2}$/.test(asOfRaw) ? asOfRaw : undefined;
+    const result = await runDailyMatchingJob(limit, { dryRun, withBriefs: dryRun && withBriefs, asOf });
     res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to run matching job";
