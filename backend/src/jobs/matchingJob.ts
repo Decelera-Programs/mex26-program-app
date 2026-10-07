@@ -12,7 +12,7 @@ const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embe
 // Founder<->Experience Maker daily matching runs in the program's timezone.
 export const MATCHING_TIMEZONE = "America/Cancun";
 // First program day (YYYY-MM-DD, MATCHING_TIMEZONE) on which real matches may be created.
-const MATCH_START_DATE = (process.env.MATCH_START_DATE || "2026-10-12").trim();
+const MATCH_START_DATE = (process.env.MATCH_START_DATE || "2026-10-10").trim();
 // Local hour (0-23) from which each day's matches are created and pushed.
 const MATCH_START_HOUR = Number.parseInt(process.env.MATCH_START_HOUR || "7", 10);
 const MATCH_CANDIDATE_POOL_SIZE = 10;
