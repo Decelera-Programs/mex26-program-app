@@ -193,14 +193,12 @@ async function resolveAccessibleOneOnOneForPerson(
   oneOnOneId: string,
   person: { id: string; contact_type: string | null; startup_id: string | null; is_team?: boolean | null },
 ) {
-  const isEM = actsAsExperienceMaker(person);
-  if (!isEM && !person.startup_id) return null;
-  const whereClause = isEM
-    ? { id: oneOnOneId, em_id: person.id }
-    : { id: oneOnOneId, startup_id: person.startup_id! };
+  // Audio, transcripts and ratings of a 1:1 are for the assigned EM only: founders (and
+  // anyone else on the startup side) never get access through this resolver.
+  if (!actsAsExperienceMaker(person)) return null;
 
   return prisma.oneOnOne.findFirst({
-    where: whereClause,
+    where: { id: oneOnOneId, em_id: person.id },
     select: {
       id: true,
       startup_id: true,
@@ -1759,13 +1757,18 @@ app.get("/one-on-ones/me", async (req, res) => {
     // Expose only whether an audio exists (Home's "1:1s without audio" badge),
     // so the client doesn't need one signed-URL request per 1:1 for it.
     res.json(
-      records.map(({ active_audio_url, active_audio_storage_path, audioSubmissions, ...record }) => ({
-        ...record,
-        has_active_audio: Boolean(active_audio_url || active_audio_storage_path),
-        // The EM rates the team (and founders) once per 1:1: only the first
-        // feedback sent for it opens the rating modal.
-        has_rating: audioSubmissions.some((submission) => submission.team_kpis != null),
-      })),
+      records.map(({ active_audio_url, active_audio_storage_path, audioSubmissions, ...record }) =>
+        isEM
+          ? {
+              ...record,
+              has_active_audio: Boolean(active_audio_url || active_audio_storage_path),
+              // The EM rates the team (and founders) once per 1:1: only the first
+              // feedback sent for it opens the rating modal.
+              has_rating: audioSubmissions.some((submission) => submission.team_kpis != null),
+            }
+          : // Founders only see the meeting itself, never whether/what the EM recorded or rated.
+            { ...record, has_active_audio: false, has_rating: false },
+      ),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load 1:1 meetings";
@@ -1786,17 +1789,12 @@ app.get("/one-on-ones/me/audio", async (req, res) => {
       return;
     }
 
-    const isEM = actsAsExperienceMaker(me);
-    const audioWhereClause = isEM
-      ? { em_id: me.id }
-      : me.startup_id
-        ? { startup_id: me.startup_id }
-        : null;
-
-    if (!audioWhereClause) {
-      res.json([]);
+    // EM-only: founders receive no audio, transcript or rating data.
+    if (!actsAsExperienceMaker(me)) {
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
+    const audioWhereClause = { em_id: me.id };
 
     const oneOnOnes = await prisma.oneOnOne.findMany({
       where: audioWhereClause,
