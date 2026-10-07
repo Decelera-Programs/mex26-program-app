@@ -13,6 +13,7 @@ import {
   decideFailureOutcome,
   hasKnownAudioContainer,
 } from "./lib/teamNoteTranscription.js";
+import { MAX_TRANSCRIBABLE_AUDIO_BYTES, isOwnedOneOnOnePath, isOwnedTeamNotePath } from "./lib/audioPaths.js";
 import { isFounder, isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
@@ -109,6 +110,7 @@ const JOBS_API_KEY = (process.env.JOBS_API_KEY || "").trim();
 const ONE_ON_ONE_AUDIO_BUCKET = (process.env.SUPABASE_AUDIO_BUCKET || "one-on-ones-audio").trim();
 const ONE_ON_ONE_AUDIO_SIGNED_URL_TTL_SEC = 60 * 60;
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
+const TRANSCRIPTION_TIMEOUT_MS = 180_000;
 const OPENAI_TRANSCRIPTION_MODEL = (process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe").trim();
 
 const campaignFiltersSchema = z
@@ -470,6 +472,13 @@ async function transcribeAudioBuffer(
     throw new TranscriptionError("OPENAI_API_KEY is not configured in backend env", "infra");
   }
 
+  if (audioBuffer.byteLength > MAX_TRANSCRIBABLE_AUDIO_BYTES) {
+    throw new TranscriptionError(
+      `Audio demasiado grande para transcribir (${Math.round(audioBuffer.byteLength / 1024 / 1024)} MB, máx. 25 MB); archivo conservado`,
+      "permanent",
+    );
+  }
+
   const form = new FormData();
   form.append("model", OPENAI_TRANSCRIPTION_MODEL);
   form.append("file", new Blob([audioBuffer], { type: mimeType || "audio/webm" }), fileName);
@@ -483,6 +492,8 @@ async function transcribeAudioBuffer(
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: form,
+      // A hung request must not freeze the whole queue (the running flag stays set until it returns).
+      signal: AbortSignal.timeout(TRANSCRIPTION_TIMEOUT_MS),
     });
   } catch (error) {
     throw new TranscriptionError(error instanceof Error ? error.message : "OpenAI request failed", "infra");
@@ -584,12 +595,15 @@ async function runOneOnOneTranscriptionJobInner(limit: number) {
     try {
       const { data, error } = await admin.storage.from(ONE_ON_ONE_AUDIO_BUCKET).download(storagePath);
       if (error || !data) {
-        throw new Error(error?.message || "Failed to download audio from Supabase Storage");
+        throw new TranscriptionError(error?.message || "Failed to download audio from Supabase Storage", "note");
       }
 
       const mimeType = data.type || submission.mime_type || "audio/webm";
       const audioBuffer = await data.arrayBuffer();
-      const transcript = await transcribeAudioBuffer(audioBuffer, mimeType, `one-on-one-${submission.id}.webm`);
+      if (!hasKnownAudioContainer(audioBuffer)) {
+        throw new TranscriptionError("Audio sin cabecera válida (grabación dañada); archivo conservado para recuperación", "permanent");
+      }
+      const transcript = await transcribeAudioBuffer(audioBuffer, mimeType, audioFileNameFor(`one-on-one-${submission.id}`, mimeType));
 
       await prisma.oneOnOneAudioSubmission.update({
         where: { id: submission.id },
@@ -602,11 +616,14 @@ async function runOneOnOneTranscriptionJobInner(limit: number) {
       impactedOneOnOnes.add(submission.one_on_one_id);
       succeeded += 1;
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown transcription error";
+      const kind: TranscriptionErrorKind = error instanceof TranscriptionError ? error.kind : "note";
+      // Same policy as team notes: permanent failures and exhausted note-specific retries
+      // end as "failed" (audio stays in storage); infra errors keep retrying without
+      // consuming attempts.
       await prisma.oneOnOneAudioSubmission.update({
         where: { id: submission.id },
-        data: {
-          transcript_error: error instanceof Error ? error.message : "Unknown transcription error",
-        },
+        data: decideFailureOutcome(kind, message, submission.transcript_error),
       });
       failed += 1;
     }
@@ -1948,6 +1965,12 @@ app.post("/one-on-ones/:id/audio", async (req, res) => {
       res.status(400).json({ error: "Uploaded attempts require storage_path" });
       return;
     }
+    // The path is client-supplied but later read/transcribed/signed with the service role:
+    // it must be inside this caller's own folder for this 1:1.
+    if (payload.storage_path && !isOwnedOneOnOnePath(payload.storage_path, oneOnOne.id, auth.auth.sub)) {
+      res.status(400).json({ error: "Invalid storage_path" });
+      return;
+    }
     if (payload.status === "failed" && !payload.error_message) {
       res.status(400).json({ error: "Failed attempts require error_message" });
       return;
@@ -2208,6 +2231,18 @@ app.post("/team-notes", async (req, res) => {
     }
     if (payload.status === "uploaded" && !payload.storage_path) {
       res.status(400).json({ error: "storage_path is required for uploaded notes" });
+      return;
+    }
+    if (
+      payload.storage_path &&
+      !isOwnedTeamNotePath(
+        payload.storage_path,
+        payload.target_type,
+        (payload.target_type === "startup" ? payload.startup_id : payload.founder_id) || "",
+        auth.auth.sub,
+      )
+    ) {
+      res.status(400).json({ error: "Invalid storage_path" });
       return;
     }
     if (payload.status === "transcribed" && !payload.transcript_text) {
