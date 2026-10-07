@@ -6,7 +6,7 @@ import {
   classifyOpenAiFailure,
   decideFailureOutcome,
   hasKnownAudioContainer,
-} from "./teamNoteTranscription";
+} from "./teamNoteTranscription.js";
 
 const buf = (...bytes: number[]) => new Uint8Array([...bytes, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).buffer;
 

@@ -12,7 +12,7 @@ import {
   classifyOpenAiFailure,
   decideFailureOutcome,
   hasKnownAudioContainer,
-} from "./lib/teamNoteTranscription";
+} from "./lib/teamNoteTranscription.js";
 import { isFounder, isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
