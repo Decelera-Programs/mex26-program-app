@@ -11,6 +11,8 @@ const OPENAI_EMBEDDING_MODEL = (process.env.OPENAI_EMBEDDING_MODEL || "text-embe
 
 // Founder<->Experience Maker daily matching runs in the program's timezone.
 export const MATCHING_TIMEZONE = "America/Cancun";
+// First program day (YYYY-MM-DD, MATCHING_TIMEZONE) on which real matches may be created.
+const MATCH_START_DATE = (process.env.MATCH_START_DATE || "2026-10-10").trim();
 const MATCH_CANDIDATE_POOL_SIZE = 10;
 export const MATCH_WEIGHT_CHALLENGE = 3;
 export const MATCH_WEIGHT_DIRECT_TAG = 1;
@@ -750,9 +752,18 @@ export function assignFoundersToEms(edges: MatchEdge[], capacity: number): Map<s
 // one bad day can't take down /jobs/run-all. Pass { dryRun: true } to compute the
 // plan + skip reasons without writing any match/notification rows or generating
 // topic text (embeddings are still resolved — cheap and cached).
-export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean } = {}) {
+export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; withBriefs?: boolean } = {}) {
   const dryRun = opts.dryRun === true;
   try {
+    // Program start gate: real runs do nothing before MATCH_START_DATE (Cancun date),
+    // regardless of arrival dates or challenges. Dry runs bypass it for previews.
+    if (!dryRun) {
+      const today = todayDateKey(MATCHING_TIMEZONE);
+      if (today < MATCH_START_DATE) {
+        return { ok: true as const, dry_run: false, skipped: "before_start_date" as const, matched: 0 };
+      }
+    }
+
     // Cheap precheck before loading the pool (every person's embedding, ~MBs):
     // this runs every 5 minutes, and once every founder has today's match
     // there's nothing to do until tomorrow.
@@ -885,7 +896,35 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean }
     plan.sort((a, b) => b.score - a.score);
 
     if (dryRun) {
-      return { ...base, em_capacity: capacity, would_match: plan.length, plan, skipped };
+      // Preview of what OpenAI would write for each planned pair. Nothing is persisted
+      // or notified; this only costs one chat completion per planned pair.
+      let briefs: Array<{
+        founder: string;
+        em: string;
+        source: "ai" | "fallback";
+        error?: string;
+        brief: MatchBrief;
+      }> | undefined;
+      if (opts.withBriefs) {
+        briefs = await Promise.all(
+          plan.map(async (p) => {
+            const founder = founderById.get(p.founder_id)!;
+            const em = emById.get(p.em_id)!;
+            try {
+              return { founder: p.founder, em: p.em, source: "ai" as const, brief: await writeMatchTopic(founder, em) };
+            } catch (error) {
+              return {
+                founder: p.founder,
+                em: p.em,
+                source: "fallback" as const,
+                error: error instanceof Error ? error.message : "unknown",
+                brief: fallbackMatchTopic(founder, em),
+              };
+            }
+          }),
+        );
+      }
+      return { ...base, em_capacity: capacity, would_match: plan.length, plan, skipped, ...(briefs ? { briefs } : {}) };
     }
 
     // 3. Persist one Match + two notifications per assigned founder (atomically).
