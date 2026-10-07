@@ -609,9 +609,67 @@ type MatchBrief = {
   em_blurb: string;
 };
 
+// What this same (founder, EM) pair talked about on earlier days, so a repeat match writes a
+// follow-up conversation instead of the same brief again.
+export type PriorBrief = {
+  date: string;
+  topic: string;
+  questions: string[];
+  talked: string | null;
+  rating: string | null;
+  takeaway: string | null;
+};
+
+const MATCH_PRIOR_BRIEFS_PER_PAIR = 3;
+
+// Never throws: on any failure the brief is simply written without history.
+async function loadPriorBriefs(
+  pairs: Array<{ founderId: string; emId: string }>,
+  todayKey: string,
+): Promise<Map<string, PriorBrief[]>> {
+  const out = new Map<string, PriorBrief[]>();
+  if (pairs.length === 0) return out;
+  try {
+    const rows = await prisma.match.findMany({
+      where: {
+        OR: pairs.map((p) => ({ founder_id: p.founderId, em_id: p.emId })),
+        match_date: { lt: new Date(`${todayKey}T00:00:00.000Z`) },
+      },
+      select: { founder_id: true, em_id: true, match_date: true, reason_text: true, ai_raw_response: true, feedback: true },
+      orderBy: { match_date: "asc" },
+    });
+    for (const row of rows) {
+      const raw =
+        row.ai_raw_response && typeof row.ai_raw_response === "object" && !Array.isArray(row.ai_raw_response)
+          ? (row.ai_raw_response as Record<string, unknown>)
+          : {};
+      const fb =
+        row.feedback && typeof row.feedback === "object" && !Array.isArray(row.feedback)
+          ? ((row.feedback as { founder?: Record<string, unknown> }).founder ?? {})
+          : {};
+      const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+      const key = `${row.founder_id}:${row.em_id}`;
+      const list = out.get(key) ?? [];
+      list.push({
+        date: row.match_date.toISOString().slice(0, 10),
+        topic: str(raw.topic) ?? row.reason_text ?? "",
+        questions: Array.isArray(raw.questions) ? raw.questions.filter((q): q is string => typeof q === "string") : [],
+        talked: str(fb.talked),
+        rating: str(fb.rating),
+        takeaway: str(fb.takeaway),
+      });
+      out.set(key, list.slice(-MATCH_PRIOR_BRIEFS_PER_PAIR));
+    }
+  } catch {
+    // history is a nicety, not a requirement
+  }
+  return out;
+}
+
 async function writeMatchTopic(
   founder: MatchCandidatePerson,
   em: MatchCandidatePerson,
+  prior: PriorBrief[] = [],
 ): Promise<MatchBrief> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured in backend env");
@@ -671,7 +729,11 @@ async function writeMatchTopic(
               "a role, a result) and a concrete detail from the founder's challenge (what they tried, what is blocking them). " +
               "Do NOT invent facts about the EM. Avoid empty buzzwords (\"communication\", \"pitches\", \"strategies\", " +
               "\"insights\") unless tied to something specific the EM actually did. " +
-              "If the fit is only partial, say so honestly and pick the one angle that is genuinely relevant. Produce: " +
+              "If the fit is only partial, say so honestly and pick the one angle that is genuinely relevant. " +
+              "If \"previous_conversations\" is present, these two have ALREADY been paired before: write a FOLLOW-UP, " +
+              "not a rerun. Do not repeat earlier topics or questions; build on them (use the takeaway/rating if given: " +
+              "a good rating means go deeper, a poor one means try a different angle), and let the opener acknowledge " +
+              "they have talked before. Produce: " +
               "1) \"topic\": max 140 characters. ONE actionable thing to talk about. " +
               "2) \"why\": array of 2 or 3 strings, max 110 characters each. Why this pairing makes sense " +
               "(cite the founder's challenge and something concrete about the EM). " +
@@ -684,7 +746,14 @@ async function writeMatchTopic(
               'Respond with ONLY a JSON object in exactly this shape: ' +
               '{"topic": string, "why": string[], "questions": string[], "opener": string, "em_blurb": string}.',
           },
-          { role: "user", content: JSON.stringify({ founder: founderContext, experience_maker: emContext }) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              founder: founderContext,
+              experience_maker: emContext,
+              ...(prior.length > 0 ? { previous_conversations: prior } : {}),
+            }),
+          },
         ],
       }),
     });
@@ -1007,6 +1076,12 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
     }
     for (const founderId of flooredFounders) assignment.delete(founderId);
 
+    // History of each assigned pair, so a repeated pair gets a follow-up brief.
+    const priorBriefs = await loadPriorBriefs(
+      [...assignment].map(([founderId, c]) => ({ founderId, emId: c.emId })),
+      todayKey,
+    );
+
     // Skip list: founders excluded from the pool + processed founders with no slot.
     const skipped: MatchSkip[] = [...excludedFounders];
     for (const founder of foundersToProcess) {
@@ -1064,7 +1139,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
             const founder = founderById.get(p.founder_id)!;
             const em = emById.get(p.em_id)!;
             try {
-              return { founder: p.founder, em: p.em, source: "ai" as const, brief: await writeMatchTopic(founder, em) };
+              return { founder: p.founder, em: p.em, source: "ai" as const, brief: await writeMatchTopic(founder, em, priorBriefs.get(`${founder.id}:${em.id}`) ?? []) };
             } catch (error) {
               return {
                 founder: p.founder,
@@ -1107,7 +1182,7 @@ export async function runDailyMatchingJob(limit = 50, opts: { dryRun?: boolean; 
         let brief = fallbackMatchTopic(founder, em);
         let topicSource = "fallback";
         try {
-          brief = await writeMatchTopic(founder, em);
+          brief = await writeMatchTopic(founder, em, priorBriefs.get(`${founder.id}:${em.id}`) ?? []);
           topicSource = "ai";
         } catch {
           // Keep the deterministic fallback brief.
