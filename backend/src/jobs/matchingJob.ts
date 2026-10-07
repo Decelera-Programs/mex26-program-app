@@ -34,7 +34,7 @@ const MATCH_TEXT_SIM_MAX = 0.55;
 // "below_quality_floor", visible in ?dryRun=1). One challenge-derived tag hit is worth
 // MATCH_WEIGHT_CHALLENGE (3) and a modest semantic signal clears this on its own;
 // raise it to be stricter.
-export const MATCH_MIN_SCORE = 2.0;
+export const MATCH_MIN_SCORE = 3.0;
 // Hard ceiling on how many founders one EM can be matched with in a single day.
 export const MATCH_EM_DAILY_CAPACITY_CAP = 4;
 // A challenge section counts as "a real problem" at this average severity.
@@ -636,6 +636,8 @@ async function writeMatchTopic(
   const emContext = {
     full_name: em.full_name,
     tagline: em.tagline,
+    // Bio first so the brief can cite something concrete about the EM (clipped to bound tokens).
+    bio: (em.bio || "").trim().slice(0, 700) || null,
     company_name: em.company_name,
     expertise_tags: em.expertise_tags,
   };
@@ -664,15 +666,21 @@ async function writeMatchTopic(
               "You are given a founder with a live challenge and an experience maker they are ALREADY paired with for today. " +
               "The founder should talk to them informally (in a break or over a meal, WITHOUT booking a meeting) " +
               "for a short, useful conversation. Write everything in English, concrete, nothing generic, anchored in the " +
-              "founder's real challenge and in something specific about that EM's expertise or experience. Produce: " +
+              "founder's real challenge and in something specific about that EM's expertise or experience. " +
+              "Ground every claim in the data provided: cite a concrete detail from the EM's bio (a company they built, " +
+              "a role, a result) and a concrete detail from the founder's challenge (what they tried, what is blocking them). " +
+              "Do NOT invent facts about the EM. Avoid empty buzzwords (\"communication\", \"pitches\", \"strategies\", " +
+              "\"insights\") unless tied to something specific the EM actually did. " +
+              "If the fit is only partial, say so honestly and pick the one angle that is genuinely relevant. Produce: " +
               "1) \"topic\": max 140 characters. ONE actionable thing to talk about. " +
               "2) \"why\": array of 2 or 3 strings, max 110 characters each. Why this pairing makes sense " +
               "(cite the founder's challenge and something concrete about the EM). " +
               "3) \"questions\": array of EXACTLY 3 strings, max 130 characters each. Concrete questions " +
-              "the founder can ask them, anchored in the challenge. " +
+              "the founder can ask them, anchored in the challenge and in the EM's real experience. " +
               "4) \"opener\": max 150 characters. A first-person line the founder can say verbatim " +
               "to start naturally and informally. " +
-              "5) \"em_blurb\": max 130 characters. One line, aimed AT the EM, saying what the founder wants from them. " +
+              "5) \"em_blurb\": max 130 characters. One line shown to the EM, written in the THIRD person about the founder " +
+              "(e.g. \"Ana wants your take on...\"), saying what the founder wants from them. " +
               'Respond with ONLY a JSON object in exactly this shape: ' +
               '{"topic": string, "why": string[], "questions": string[], "opener": string, "em_blurb": string}.',
           },
