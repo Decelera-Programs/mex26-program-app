@@ -6,6 +6,13 @@ import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { ONE_PAGER_BUCKET, canSeeOnePager, resolveOnePager } from "./lib/onePager.js";
+import {
+  type TranscriptionErrorKind,
+  audioFileNameFor,
+  classifyOpenAiFailure,
+  decideFailureOutcome,
+  hasKnownAudioContainer,
+} from "./lib/teamNoteTranscription";
 import { isFounder, isRateable, parseFeedbackBody, pendingTalks } from "./lib/talkFeedback.js";
 import { Prisma, NotificationCampaignStatus } from "@prisma/client";
 import webpush from "web-push";
@@ -446,13 +453,21 @@ async function createOneOnOneAudioSignedUrl(storagePath: string | null | undefin
   return data?.signedUrl || "";
 }
 
+class TranscriptionError extends Error {
+  kind: TranscriptionErrorKind;
+  constructor(message: string, kind: TranscriptionErrorKind) {
+    super(message);
+    this.kind = kind;
+  }
+}
+
 async function transcribeAudioBuffer(
   audioBuffer: ArrayBuffer,
   mimeType: string,
   fileName = "meeting-audio.webm",
 ) {
   if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured in backend env");
+    throw new TranscriptionError("OPENAI_API_KEY is not configured in backend env", "infra");
   }
 
   const form = new FormData();
@@ -460,22 +475,28 @@ async function transcribeAudioBuffer(
   form.append("file", new Blob([audioBuffer], { type: mimeType || "audio/webm" }), fileName);
   form.append("response_format", "json");
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: form,
-  });
+  let response: globalThis.Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: form,
+    });
+  } catch (error) {
+    throw new TranscriptionError(error instanceof Error ? error.message : "OpenAI request failed", "infra");
+  }
 
   const payload = (await response.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
   if (!response.ok) {
-    throw new Error(payload?.error?.message || "OpenAI transcription request failed");
+    const message = payload?.error?.message || "OpenAI transcription request failed";
+    throw new TranscriptionError(message, classifyOpenAiFailure(response.status, message));
   }
 
   const text = String(payload?.text || "").trim();
   if (!text) {
-    throw new Error("Empty transcription result");
+    throw new TranscriptionError("Empty transcription result", "permanent");
   }
   return text;
 }
@@ -646,12 +667,15 @@ async function runTeamNoteTranscriptionJobInner(limit: number) {
     try {
       const { data, error } = await admin.storage.from(ONE_ON_ONE_AUDIO_BUCKET).download(storagePath);
       if (error || !data) {
-        throw new Error(error?.message || "Failed to download audio from Supabase Storage");
+        throw new TranscriptionError(error?.message || "Failed to download audio from Supabase Storage", "note");
       }
 
       const mimeType = data.type || note.mime_type || "audio/webm";
       const audioBuffer = await data.arrayBuffer();
-      const transcript = await transcribeAudioBuffer(audioBuffer, mimeType, `team-note-${note.id}.webm`);
+      if (!hasKnownAudioContainer(audioBuffer)) {
+        throw new TranscriptionError("Audio sin cabecera válida (grabación dañada); archivo conservado para recuperación", "permanent");
+      }
+      const transcript = await transcribeAudioBuffer(audioBuffer, mimeType, audioFileNameFor(`team-note-${note.id}`, mimeType));
 
       await prisma.teamAudioNote.update({
         where: { id: note.id },
@@ -664,11 +688,14 @@ async function runTeamNoteTranscriptionJobInner(limit: number) {
       });
       succeeded += 1;
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown transcription error";
+      const kind: TranscriptionErrorKind = error instanceof TranscriptionError ? error.kind : "note";
+      // "failed" is terminal: the job stops retrying and the UI shows it instead of
+      // "Processing" forever. The audio stays in storage; to retry manually set the
+      // status back to "uploaded" and clear transcript_error.
       await prisma.teamAudioNote.update({
         where: { id: note.id },
-        data: {
-          transcript_error: error instanceof Error ? error.message : "Unknown transcription error",
-        },
+        data: decideFailureOutcome(kind, message, note.transcript_error),
       });
       failed += 1;
     }
