@@ -839,30 +839,7 @@ export default function OneOnOnes() {
                                   Close
                                 </button>
                               ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    aria-label="Record audio feedback"
-                                    onClick={() => {
-                                      setMeetingNoteMode(item.id, "audio");
-                                      if (expandedAudioId !== item.id) handleToggleAudio(item.id);
-                                    }}
-                                    style={{ width: 30, height: 30, borderRadius: "50%", border: 0, background: "#1FD0EF", color: "#2D3852", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}
-                                  >
-                                    <Mic size={15} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label="Write text feedback"
-                                    onClick={() => {
-                                      setMeetingNoteMode(item.id, "text");
-                                      if (expandedAudioId !== item.id) handleToggleAudio(item.id);
-                                    }}
-                                    style={{ width: 30, height: 30, borderRadius: "50%", border: 0, background: "rgba(242,248,250,0.14)", color: "#F2F8FA", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, touchAction: "manipulation" }}
-                                  >
-                                    <PenLine size={15} />
-                                  </button>
-                                </>
+                                <ChevronRight size={16} color="#B9C1D4" style={{ marginRight: 8, flexShrink: 0 }} />
                               )}
                             </div>
 
