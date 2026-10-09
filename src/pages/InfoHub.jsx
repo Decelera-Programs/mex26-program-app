@@ -236,7 +236,8 @@ export default function InfoHub() {
           <ArrowRight size={16} color="#9AA3B8" strokeWidth={1.8} />
         </Motion.a>
 
-        {/* Human DD forms card */}
+        {/* Human DD forms card — solo equipo */}
+        {isTeam && (
         <Motion.a
           href="https://human-dd-mex26-forms-production.up.railway.app/"
           target="_blank"
@@ -259,6 +260,7 @@ export default function InfoHub() {
           <span style={{ fontSize: 13, fontWeight: 500, color: "#2D3852" }}>Human DD forms</span>
           <ArrowRight size={16} color="#9AA3B8" strokeWidth={1.8} />
         </Motion.a>
+        )}
 
         {isTeam && (
           <Motion.div
