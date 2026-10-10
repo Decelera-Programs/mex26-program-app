@@ -133,8 +133,12 @@ self.addEventListener("push", (event) => {
     targetUrl = `/home?match=${encodeURIComponent(matchId)}`;
     if (notificationId) targetUrl += `&notif=${encodeURIComponent(notificationId)}`;
   } else {
-    const baseUrl = eventId ? `/event/${eventId}` : personId ? `/person/${personId}` : "/notifications";
-    targetUrl = notificationId ? `${baseUrl}?notif=${notificationId}` : baseUrl;
+    // Events open as a modal over the schedule (?event=<id>, handled by Layout).
+    // There is no /event/:id route: it would fall through to the "*" redirect to
+    // /home and drop the query, so the push never reached the event.
+    const baseUrl = eventId ? `/schedule?event=${encodeURIComponent(eventId)}` : personId ? `/person/${personId}` : "/notifications";
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    targetUrl = notificationId ? `${baseUrl}${sep}notif=${encodeURIComponent(notificationId)}` : baseUrl;
   }
   event.waitUntil(
     self.registration.showNotification(title, {
