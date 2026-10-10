@@ -19,6 +19,7 @@ export const personSafeSelect = {
   startup_id: true,
   post_program_expectations: true,
   fun_fact: true,
+  dinner_tables: true,
   createdAt: true,
   updatedAt: true,
   // Only what clients render — never the whole Startup row (its

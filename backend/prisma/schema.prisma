@@ -52,6 +52,8 @@ model Person {
   embedding      Json?
   post_program_expectations   Json?
   fun_fact       String?
+  /// Seating per dinner: { "<event id>": <table number> }. Shown on Home while that dinner is on.
+  dinner_tables  Json?
   dni            String?
   olbi_brs       Json?
   olbi_brs_post  Json?

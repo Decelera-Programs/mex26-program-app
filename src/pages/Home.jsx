@@ -271,6 +271,22 @@ export default function Home() {
   }, [events, nowTick]);
   const liveNow = liveEvents[0] || null;
 
+  // Seating for tonight's dinner: shown from the start of the day until the dinner ends,
+  // only to people who have a table assigned for that dinner (Person.dinner_tables).
+  const dinnerTable = useMemo(() => {
+    const tables = currentUser?.dinner_tables;
+    if (!tables || typeof tables !== "object") return null;
+    for (const event of todaysEvents) {
+      if (!/dinner/i.test(event?.title || "") || /^\s*em\b/i.test(event?.title || "")) continue;
+      const table = tables[event.id];
+      if (table == null) continue;
+      const end = parseEventDate(event?.end_time || event?.endTime)?.getTime();
+      if (end != null && nowTick >= end) continue;
+      return { table, event };
+    }
+    return null;
+  }, [currentUser, todaysEvents, nowTick]);
+
   function formatHour(rawDate) {
     const dt = parseEventDate(rawDate);
     if (!dt) return "--:--";
@@ -371,6 +387,29 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        {dinnerTable ? (
+          <section
+            className="rounded-[20px] px-[18px] py-[14px] flex items-center justify-between gap-3"
+            style={{ background: "#FAF3DC", color: "#2D3852", boxShadow: "0 10px 28px rgba(45,56,82,0.08)" }}
+          >
+            <div className="min-w-0">
+              <p style={{ fontSize: "11px", letterSpacing: "0.14em", fontWeight: 600, opacity: 0.7, margin: 0 }} className="uppercase">
+                Your table for tonight&apos;s dinner
+              </p>
+              <p style={{ fontSize: "12px", opacity: 0.75, margin: "4px 0 0" }}>
+                {dinnerTable.event.title}
+                {dinnerTable.event.location ? ` · ${dinnerTable.event.location}` : ""}
+              </p>
+            </div>
+            <span
+              style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 40, lineHeight: 1, whiteSpace: "nowrap" }}
+              aria-label={`Table ${dinnerTable.table}`}
+            >
+              {dinnerTable.table}
+            </span>
+          </section>
+        ) : null}
 
         <div ref={matchAnchorRef} style={{ scrollMarginTop: 16 }} />
         {todayMatch ? (
