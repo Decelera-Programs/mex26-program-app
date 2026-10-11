@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate, useNavigationType } from "react-router-dom";
-import { Home, Calendar, Info, Users, Building2, ArrowLeft, Bell, LogOut } from "lucide-react";
+import { Home, Calendar, Info, Users, Building2, ArrowLeft, Bell, LogOut, MessageSquare } from "lucide-react";
 import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import LoadingState from "./LoadingState";
@@ -26,6 +26,7 @@ export default function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const isTeamUser = currentUser?.contact_type === "team" || Boolean(currentUser?.is_team);
   const navigationType = useNavigationType();
   const mainRef = useRef(null);
   const scrollPositions = useRef(new Map());
@@ -300,6 +301,37 @@ export default function Layout() {
                   minWidth: 140,
                 }}
               >
+                {isTeamUser && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      navigate("/team-notes");
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      width: "100%",
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      cursor: "pointer",
+                      color: "#2D3852",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: "Fustat, sans-serif",
+                      textAlign: "left",
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#F2F8FA"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <MessageSquare size={14} strokeWidth={2} color="#6E7892" />
+                    Send Feedback
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={async () => {
