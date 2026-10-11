@@ -54,6 +54,8 @@ model Person {
   fun_fact       String?
   /// Seating per dinner: { "<event id>": <table number> }. Shown on Home while that dinner is on.
   dinner_tables  Json?
+  /// Workstation group per session: { "<event id>": { group, family, team, startups } }. Shown on Home while that session is on.
+  workstation_groups  Json?
   dni            String?
   olbi_brs       Json?
   olbi_brs_post  Json?

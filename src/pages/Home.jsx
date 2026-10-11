@@ -289,6 +289,21 @@ export default function Home() {
     return null;
   }, [currentUser, todaysEvents, nowTick]);
 
+  // Today's Workstations group (Person.workstation_groups), shown until the session ends.
+  const workstationGroup = useMemo(() => {
+    const groups = currentUser?.workstation_groups;
+    if (!groups || typeof groups !== "object") return null;
+    for (const event of todaysEvents) {
+      if (!/workstation/i.test(event?.title || "")) continue;
+      const info = groups[event.id];
+      if (!info) continue;
+      const end = parseEventDate(event?.end_time || event?.endTime)?.getTime();
+      if (end != null && nowTick >= end) continue;
+      return { info, event };
+    }
+    return null;
+  }, [currentUser, todaysEvents, nowTick]);
+
   function formatHour(rawDate) {
     const dt = parseEventDate(rawDate);
     if (!dt) return "--:--";
@@ -409,6 +424,34 @@ export default function Home() {
               aria-label={`Table ${dinnerTable.table}`}
             >
               {dinnerTable.table}
+            </span>
+          </section>
+        ) : null}
+
+        {workstationGroup ? (
+          <section
+            className="rounded-[20px] px-[18px] py-[14px] flex items-center justify-between gap-3"
+            style={{ background: "#FAF3DC", color: "#2D3852", boxShadow: "0 10px 28px rgba(45,56,82,0.08)" }}
+          >
+            <div className="min-w-0">
+              <p style={{ fontSize: "11px", letterSpacing: "0.14em", fontWeight: 600, opacity: 0.7, margin: 0 }} className="uppercase">
+                Your group for today&apos;s Workstations
+              </p>
+              {workstationGroup.info.family ? (
+                <p style={{ fontSize: "14px", fontWeight: 600, margin: "6px 0 0" }}>{workstationGroup.info.family}</p>
+              ) : null}
+              <p style={{ fontSize: "12px", opacity: 0.75, margin: "4px 0 0" }}>
+                {workstationGroup.info.team
+                  ? `With ${workstationGroup.info.team} from Decelera`
+                  : `Startups: ${(workstationGroup.info.startups || []).join(", ")}`}
+                {workstationGroup.event.location ? ` · ${workstationGroup.event.location}` : ""}
+              </p>
+            </div>
+            <span
+              style={{ fontFamily: "Taviraj, serif", fontWeight: 400, fontSize: 40, lineHeight: 1, whiteSpace: "nowrap" }}
+              aria-label={`Group ${workstationGroup.info.group}`}
+            >
+              {workstationGroup.info.group}
             </span>
           </section>
         ) : null}
