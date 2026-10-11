@@ -274,14 +274,14 @@ export default function Home() {
 
 
   // Seating for tonight's dinner: shown from the start of the day until the dinner ends,
-  // only to people who have a table assigned for that dinner (Person.dinner_tables).
+  // only to people who have a table assigned for that dinner (Person.event_assignments).
   const dinnerTable = useMemo(() => {
-    const tables = currentUser?.dinner_tables;
+    const tables = currentUser?.event_assignments;
     if (!tables || typeof tables !== "object") return null;
     for (const event of todaysEvents) {
       if (!/dinner/i.test(event?.title || "") || /^\s*em\b/i.test(event?.title || "")) continue;
       const table = tables[event.id];
-      if (table == null) continue;
+      if (typeof table !== "number" && typeof table !== "string") continue;
       const end = parseEventDate(event?.end_time || event?.endTime)?.getTime();
       if (end != null && nowTick >= end) continue;
       return { table, event };
@@ -289,14 +289,14 @@ export default function Home() {
     return null;
   }, [currentUser, todaysEvents, nowTick]);
 
-  // Today's Workstations group (Person.workstation_groups), shown until the session ends.
+  // Today's Workstations group (Person.event_assignments), shown until the session ends.
   const workstationGroup = useMemo(() => {
-    const groups = currentUser?.workstation_groups;
+    const groups = currentUser?.event_assignments;
     if (!groups || typeof groups !== "object") return null;
     for (const event of todaysEvents) {
       if (!/workstation/i.test(event?.title || "")) continue;
       const info = groups[event.id];
-      if (!info) continue;
+      if (!info || typeof info !== "object") continue;
       const end = parseEventDate(event?.end_time || event?.endTime)?.getTime();
       if (end != null && nowTick >= end) continue;
       return { info, event };
