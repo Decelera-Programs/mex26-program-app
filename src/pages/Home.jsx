@@ -400,7 +400,15 @@ export default function Home() {
               target="_blank"
               rel="noopener noreferrer"
               className="w-full rounded-[20px] px-[18px] py-[16px] flex items-center gap-[14px] transition-all duration-200 hover:-translate-y-[1px] active:opacity-80"
-              style={{ background: "#FFB950", color: "#2D3852", boxShadow: "0 14px 32px rgba(255,185,80,0.35)", textDecoration: "none" }}
+              style={{
+                display: "flex",
+                width: "100%",
+                boxSizing: "border-box",
+                background: "#FFB950",
+                color: "#2D3852",
+                boxShadow: "0 10px 28px rgba(45,56,82,0.08)",
+                textDecoration: "none",
+              }}
             >
               <span
                 className="flex items-center justify-center rounded-full"
