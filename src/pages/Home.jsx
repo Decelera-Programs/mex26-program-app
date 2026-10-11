@@ -274,7 +274,7 @@ export default function Home() {
   const liveNow = liveEvents[0] || null;
 
   // Legal Maze form link: for founders, plus is_team users (just Carlos for now) as a test.
-  const showLegalMaze = currentUser?.contact_type === "founder" || currentUser?.is_team === true;
+  const showLegalMaze = Boolean(currentUser);
 
   // Seating for tonight's dinner: shown from the start of the day until the dinner ends,
   // only to people who have a table assigned for that dinner (Person.dinner_tables).
