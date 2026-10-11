@@ -3,7 +3,7 @@ import { getCurrentUser, getHomeDailyContent, getMyMatches, listEvents, listMyOn
 import MatchCard from "../components/MatchCard";
 import MatchIntroModal from "../components/MatchIntroModal";
 import AttentionWrap from "../components/AttentionWrap";
-import { CalendarDays, Camera, ChevronRight, ExternalLink, MapPin, Scale, Users } from "lucide-react";
+import { CalendarDays, Camera, ChevronRight, MapPin, Users } from "lucide-react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PROGRAM_TIMEZONE, daysSinceProgramStart, getTodayKey, programNow } from "../lib/dateTime";
@@ -32,7 +32,6 @@ function dateKeyInProgramTz(raw) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: PROGRAM_TIMEZONE }).format(d);
 }
 
-const LEGAL_MAZE_URL = "https://legal-maze-forms-production.up.railway.app/";
 
 const ONE_ON_ONE_VISIT_KEY = "decelera.oneonones.visited";
 function oneOnOnesVisitedOn(dayKey) {
@@ -273,8 +272,6 @@ export default function Home() {
   }, [events, nowTick]);
   const liveNow = liveEvents[0] || null;
 
-  // Legal Maze form link: for founders, plus is_team users (just Carlos for now) as a test.
-  const showLegalMaze = Boolean(currentUser);
 
   // Seating for tonight's dinner: shown from the start of the day until the dinner ends,
   // only to people who have a table assigned for that dinner (Person.dinner_tables).
@@ -392,37 +389,6 @@ export default function Home() {
             </p>
           </div>
         </section>
-
-        {showLegalMaze ? (
-          <AttentionWrap pulse>
-            <a
-              href={LEGAL_MAZE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full rounded-[20px] px-[18px] py-[16px] flex items-center gap-[14px] transition-all duration-200 hover:-translate-y-[1px] active:opacity-80"
-              style={{
-                display: "flex",
-                width: "100%",
-                boxSizing: "border-box",
-                background: "#FFB950",
-                color: "#2D3852",
-                boxShadow: "0 10px 28px rgba(45,56,82,0.08)",
-                textDecoration: "none",
-              }}
-            >
-              <span
-                className="flex items-center justify-center rounded-full"
-                style={{ width: 44, height: 44, background: "rgba(45,56,82,0.12)", flexShrink: 0 }}
-              >
-                <Scale size={22} color="#2D3852" />
-              </span>
-              <span className="min-w-0 flex-1" style={{ fontFamily: "Taviraj, serif", fontWeight: 500, fontSize: 24, lineHeight: 1.1 }}>
-                Legal Maze
-              </span>
-              <ExternalLink size={18} color="#2D3852" style={{ flexShrink: 0, opacity: 0.7 }} />
-            </a>
-          </AttentionWrap>
-        ) : null}
 
         {dinnerTable ? (
           <section
