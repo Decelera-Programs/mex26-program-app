@@ -861,13 +861,13 @@ export default function OneOnOnes() {
                                         Record a short voice note or type it. Use these points as a guide for what to cover: no scores needed, just share what stood out to you.
                                       </p>
                                       <ul style={{ fontSize: 10.5, color: "#6E7892", lineHeight: 1.65, paddingLeft: 14, margin: 0 }}>
-                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>State of development</span> — current product or project maturity</li>
-                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Momentum</span> — pace of progress and execution speed</li>
-                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Management</span> — leadership capacity and decision-making</li>
-                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Market</span> — market opportunity and competitive positioning</li>
-                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Team</span> — team composition, cohesion, and capability</li>
                                         <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Pain</span> — clarity and severity of the problem being solved</li>
+                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Solution</span> — current product and state of development. Is it medicine or vitamin?</li>
+                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Market</span> — market size and competition</li>
+                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Execution and momentum</span> — pace of progress and execution speed</li>
+                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Go to market</span> — clear ICP, clear strategy to win the ICP, proper CAC/LTV</li>
                                         <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Scalability</span> — potential to grow significantly</li>
+                                        <li><span style={{ fontWeight: 600, color: "#2D3852" }}>Team</span> — hard skills composition, cohesion, leadership, vision alignment</li>
                                       </ul>
                                     </div>
                                     {audioUi.previewUrl ? (
